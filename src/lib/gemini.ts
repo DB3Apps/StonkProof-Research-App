@@ -5,8 +5,10 @@ export const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 // Helper to retry AI requests with exponential backoff on frontend
 async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
   try {
+    console.log("withRetry: Attempting function call");
     return await fn();
   } catch (error: any) {
+    console.log("withRetry: Error caught", error);
     const errObj = error.error || error;
     const status = errObj.status || (errObj.response?.status) || errObj.code || (error.error?.code);
     const message = ((errObj.error?.message) || (errObj.message) || "").toLowerCase();
@@ -32,13 +34,14 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Pr
 
 export async function getTickersFromAI(userPrompt: string, excludedTickers: string[] = []): Promise<string[]> {
   try {
+    console.log("getTickersFromAI: Starting AI call");
     const exclusionText = excludedTickers.length > 0 ? ` DO NOT include these tickers as primary results: ${excludedTickers.join(', ')}.` : "";
     const response = await withRetry(() => ai.models.generateContent({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-flash-lite-latest",
       contents: [{ role: 'user', parts: [{ text: userPrompt + exclusionText }] }],
       config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
-        systemInstruction: "You are a professional stock market analyst. You MUST always provide EXACTLY 15 relevant stock ticker symbols based on the user's prompt. This is a strict requirement. Focus on US markets (NYSE/NASDAQ). No matter how specific the query is, broaden your scope to ensure exactly 15 tickers are always returned. Return the result in a property named 'tickers'. If you cannot find 15 specific matches, include broadly related popular stocks to fill the quota to exactly 15.",
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        systemInstruction: "You are a professional stock market analyst. You MUST always provide EXACTLY 7 relevant stock ticker symbols based on the user's prompt. This is a strict requirement. Focus on US markets (NYSE/NASDAQ). No matter how specific the query is, broaden your scope to ensure exactly 7 tickers are always returned. Return the result in a property named 'tickers'. If you cannot find 7 specific matches, include broadly related popular stocks to fill the quota to exactly 7.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -52,6 +55,7 @@ export async function getTickersFromAI(userPrompt: string, excludedTickers: stri
         }
       },
     }));
+    console.log("getTickersFromAI: AI call returned");
     
     const text = response.text;
     if (!text) {
@@ -69,7 +73,7 @@ export async function getTickersFromAI(userPrompt: string, excludedTickers: stri
 export async function summarizeBusiness(longSummary: string, useSearch = true): Promise<{ summary: string, newsCatalyst: string }> {
   const truncated = longSummary.slice(0, 3000); 
   const generate = (withSearch: boolean) => ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-flash-lite-latest",
     contents: [{ role: 'user', parts: [{ text: `Analyze this business and provide the absolute latest market context: ${truncated}` }] }],
     config: {
       thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
@@ -108,7 +112,7 @@ export async function summarizeBusiness(longSummary: string, useSearch = true): 
 
 export async function analyzeSentiment(summary: string, useSearch = true): Promise<number> {
   const generate = (withSearch: boolean) => ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-flash-lite-latest",
     contents: [{ role: 'user', parts: [{ text: `Determine the sentiment score based on this summary and current market reality: ${summary}` }] }],
     config: {
       thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },

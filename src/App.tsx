@@ -150,7 +150,8 @@ const SKETCH_PATHS = {
   dice: "M4 4H20V20H4V4ZM8 8H8.1M16 16H16.1M12 12H12.1",
   pin: "M16 4L4 16M4 16C3 17 3 19 4 20C5 21 7 21 8 20C8 20 18 10 20 8C22 6 22 4 20 2C18 0 16 0 14 2L6 10",
   skateboard: "M4 14H20M6 14V17M18 14V17M3 13C6 11 18 11 21 13",
-  crown: "M3 14L6 6L12 10L18 6L21 14H3Z"
+  crown: "M3 14L6 4L9 10L12 4L15 10L18 4L21 14Z",
+  mountain: "M3 14L6 4L6.5 4.5L7 4L9 10L12 4L12.5 4.5L13 4L15 10L18 4L18.5 4.5L19 4L21 14"
 };
 
 const HandDrawnDoodle = ({ type, size, className, style, strokeWidth = 1.8 }: { type: keyof typeof SKETCH_PATHS, size: number, className?: string, style?: any, key?: any, strokeWidth?: number }) => {
@@ -631,119 +632,137 @@ export default function App() {
     const activeQuery = customQuery || query;
     if (!activeQuery.trim()) return;
     setLoading(true);
+    console.log("handleSearch: Starting research for", activeQuery);
     
-    // 1. Get suggestions from AI, excluding already found tickers for context
-    let results: string[] = [];
-    const excluded = isLoadMore ? allSeenTickers : [];
     try {
-      results = await getTickersFromAI(activeQuery, excluded);
-    } catch (err: any) {
-      console.error("Search failure:", err);
-      alert(`Research Engine encountered an issue:\n\n${err.message || 'Please try a different query type.'}`);
-      setLoading(false);
-      return;
-    }
-    
-    if (!results || results.length === 0) {
-      if (isLoadMore) {
-        alert("No more unique stock tickers found for this query.");
-      } else {
-        alert("No relevant stock tickers found for this query. Try being more specific!");
-      }
-      setLoading(false);
-      return;
-    }
-    
-    // 2. Fetch real-time prices for all suggestions to verify constraints
-    const stockInfos: Record<string, StockInfo> = {};
-    for (const t of results) {
+      // 1. Get suggestions from AI, excluding already found tickers for context
+      let results: string[] = [];
+      const excluded = isLoadMore ? allSeenTickers : [];
       try {
-        let attempts = 0;
-        let success = false;
-        
-        while (attempts < 2 && !success) {
-          const res = await fetch(`/api/stock/${t}`);
-          if (res.ok) {
-            const text = await res.text();
-            if (text) {
-              const data = JSON.parse(text);
-              if (data && !data.error) {
-                stockInfos[t] = data;
-                success = true;
-              }
-            }
-          } else if (res.status === 429) {
-            console.warn(`Rate limited for ${t}, waiting longer... (attempt ${attempts + 1})`);
-            await new Promise(resolve => setTimeout(resolve, 1000 * (attempts + 1)));
-            attempts++;
-          } else {
-            break; // Other error, don't retry
-          }
+        console.log("handleSearch: Calling getTickersFromAI");
+        results = await getTickersFromAI(activeQuery, excluded);
+        console.log("handleSearch: Got results", results);
+      } catch (err: any) {
+        console.error("Search failure:", err);
+        alert(`Research Engine encountered an issue:\n\n${err.message || 'Please try a different query type.'}`);
+        return;
+      }
+      
+      if (!results || results.length === 0) {
+        if (isLoadMore) {
+          alert("No more unique stock tickers found for this query.");
+        } else {
+          alert("No relevant stock tickers found for this query. Try being more specific!");
         }
-        
-        // Consistent delay between symbols to avoid rate limits - increased to 1500ms
-        await new Promise(resolve => setTimeout(resolve, 1500));
-      } catch (err) {
-        console.error(`Verification failed for ${t}:`, err);
+        return;
       }
-    }
-
-    // Update global stock data cache
-    
-    // Filter incomplete data
-    const validStockInfos: Record<string, StockInfo> = {};
-    for (const t of Object.keys(stockInfos)) {
-      const info = stockInfos[t];
-      // Loosened validation: focus on primary ticker info existence rather than strict business summary at discovery stage
-      if (info.shortName && info.regularMarketPrice !== undefined) {
-        validStockInfos[t] = info;
+      
+      // 2. Fetch real-time prices for all suggestions to verify constraints
+      const stockInfos: Record<string, StockInfo> = {};
+      for (const t of results) {
+        if (Object.keys(stockInfos).length >= 5) break; 
+        console.log("handleSearch: Fetching stock info for", t);
+        try {
+          let attempts = 0;
+          let success = false;
+          
+          while (attempts < 2 && !success) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), 8000); // 8s timeout
+            
+            try {
+              const res = await fetch(`/api/stock/${t}`, { signal: controller.signal });
+              clearTimeout(id);
+              if (res.ok) {
+                const text = await res.text();
+                if (text) {
+                  const data = JSON.parse(text);
+                  if (data && !data.error) {
+                    stockInfos[t] = data;
+                    success = true;
+                    console.log("handleSearch: Got info for", t);
+                  }
+                }
+              } else if (res.status === 429) {
+                console.warn(`Rate limited for ${t}, waiting longer... (attempt ${attempts + 1})`);
+                await new Promise(resolve => setTimeout(resolve, 1000 * (attempts + 1)));
+                attempts++;
+              } else {
+                break; // Other error, don't retry
+              }
+            } catch (err) {
+              clearTimeout(id);
+              throw err;
+            }
+          }
+          
+          // Consistent delay between symbols to avoid rate limits
+          await new Promise(resolve => setTimeout(resolve, 600));
+        } catch (err) {
+          console.error(`Verification failed for ${t}:`, err);
+        }
+      }
+      console.log("handleSearch: Finished fetching stock infos");
+      
+      // Update global stock data cache
+      
+      // Filter incomplete data
+      const validStockInfos: Record<string, StockInfo> = {};
+      for (const t of Object.keys(stockInfos)) {
+        const info = stockInfos[t];
+        // Loosened validation: focus on primary ticker info existence rather than strict business summary at discovery stage
+        if (info.shortName && info.regularMarketPrice !== undefined) {
+          validStockInfos[t] = info;
+        } else {
+          console.warn(`Dropping incomplete stock: ${t}`);
+        }
+      }
+      
+      setStockData(prev => ({ ...prev, ...validStockInfos }));
+  
+      if (Object.keys(validStockInfos).length === 0) {
+        alert("AI found tickers, but we couldn't retrieve market data for them. Try a different query.");
+        return;
+      }
+  
+      // 3. Apply client-side price filtering if price constraint detected
+      // Look for price-specific constraints like "under $50" or "below 20 dollars"
+      const priceMatch = activeQuery.match(/(?:price\s*(?:under|below|less|is\s*[\<\$]))\s*(\d+)|\$\s*(\d+)/i);
+      const limit = priceMatch ? parseFloat(priceMatch[1] || priceMatch[2]) : null;
+      
+      // We already have validStockInfos (keys are tickers that passed validation)
+      let candidates = Object.keys(validStockInfos);
+      
+      if (limit !== null) {
+        candidates = candidates.filter(t => {
+          const price = validStockInfos[t]?.regularMarketPrice;
+          return price !== undefined && price <= limit;
+        });
+      }
+  
+      // Now strictly take the first 5 candidates that passed everything
+      const finalResults = candidates.slice(0, 5);
+  
+      if (isLoadMore) {
+        // Transition smoothly by replacing the current 5 with the next 5
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setTickers(finalResults);
+        setAllSeenTickers(prev => [...prev, ...finalResults]);
+        setDiscoveryPage(prev => prev + 1);
       } else {
-        console.warn(`Dropping incomplete stock: ${t}`);
+        setTickers(finalResults);
+        setAllSeenTickers(finalResults);
+        setDiscoveryPage(0);
+        if (finalResults.length > 0) {
+          setSelectedTicker(finalResults[0]);
+          setStep('results');
+        }
       }
-    }
-    
-    setStockData(prev => ({ ...prev, ...validStockInfos }));
-
-    if (Object.keys(validStockInfos).length === 0) {
-      alert("AI found tickers, but we couldn't retrieve market data for them. Try a different query.");
+      console.log("handleSearch: Completed successfully");
+    } finally {
       setLoading(false);
-      return;
+      console.log("handleSearch: Loading set to false");
     }
-
-    // 3. Apply client-side price filtering if price constraint detected
-    // Look for price-specific constraints like "under $50" or "below 20 dollars"
-    const priceMatch = activeQuery.match(/(?:price\s*(?:under|below|less|is\s*[\<\$]))\s*(\d+)|\$\s*(\d+)/i);
-    const limit = priceMatch ? parseFloat(priceMatch[1] || priceMatch[2]) : null;
-    
-    // We already have validStockInfos (keys are tickers that passed validation)
-    let candidates = Object.keys(validStockInfos);
-    
-    if (limit !== null) {
-      candidates = candidates.filter(t => {
-        const price = validStockInfos[t]?.regularMarketPrice;
-        return price !== undefined && price <= limit;
-      });
-    }
-
-    // Now strictly take the first 5 candidates that passed everything
-    const finalResults = candidates.slice(0, 5);
-
-    if (isLoadMore) {
-      // Transition smoothly by replacing the current 5 with the next 5
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      setTickers(finalResults);
-      setAllSeenTickers(prev => [...prev, ...finalResults]);
-      setDiscoveryPage(prev => prev + 1);
-    } else {
-      setTickers(finalResults);
-      setAllSeenTickers(finalResults);
-      setDiscoveryPage(0);
-      if (finalResults.length > 0) {
-        setSelectedTicker(finalResults[0]);
-        setStep('results');
-      }
-    }
-    setLoading(false);
   };
 
   const handleCategoryClick = (cat: string) => {
@@ -1672,7 +1691,7 @@ if (step === 'prompt') {
                     <div className="absolute top-0 right-0 bg-gradient-to-br from-trapper-pink via-rose-500 to-orange-500 text-white text-[10px] font-bold px-3 py-1 uppercase tracking-widest shadow-[-2px_2px_0px_0px_rgba(0,0,0,1)]">NEWS</div>
                     <div className="space-y-6">
                       <div className="flex items-center gap-3">
-                        <HandDrawnDoodle type="star" size={28} className="pencil-doodle" />
+                        <HandDrawnDoodle type="eyeX" size={28} className="pencil-doodle" />
                         <h3 className="font-heading text-lg font-bold uppercase tracking-widest">NEWS</h3>
                       </div>
                       <div className="space-y-4">

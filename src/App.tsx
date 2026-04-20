@@ -1383,6 +1383,9 @@ if (step === 'prompt') {
 
                 <div className="paper-card p-6 bg-white border-2 border-slate-900 mt-6 md:col-span-4">
                   <h4 className="font-heading font-bold uppercase tracking-widest text-[10px] text-slate-400 mb-4">Grade Legend</h4>
+                  <p className="text-[9px] text-slate-500 mb-4 italic">
+                    All numerical grades come from weighted calculations based on Sentiment (40%), Relative Strength (35%), and Volatility (25%).
+                  </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px] font-heading font-bold uppercase tracking-widest text-slate-900">
                     <span>A+: 9.2 - 10.0</span>
                     <span>A: 8.5 - 9.1</span>

@@ -41,7 +41,7 @@ export async function getTickersFromAI(userPrompt: string, excludedTickers: stri
       contents: [{ role: 'user', parts: [{ text: userPrompt + exclusionText }] }],
       config: {
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        systemInstruction: "You are a professional stock market analyst. You MUST always provide EXACTLY 7 relevant stock ticker symbols based on the user's prompt. This is a strict requirement. Focus on US markets (NYSE/NASDAQ). No matter how specific the query is, broaden your scope to ensure exactly 7 tickers are always returned. Return the result in a property named 'tickers'. If you cannot find 7 specific matches, include broadly related popular stocks to fill the quota to exactly 7.",
+        systemInstruction: "You are a professional market analyst. You MUST always provide EXACTLY 7 relevant asset ticker symbols (including Stocks, Cryptocurrency, Market Indices, ETFs, and Bonds) based on the user's prompt. This is a strict requirement. Focus on US markets (NYSE/NASDAQ), major cryptocurrencies (BTC-USD, ETH-USD, etc.), indices (^GSPC, ^IXIC), ETFs (SPY, VTI, BND, etc.), and major government or corporate bonds. No matter how specific the query is, broaden your scope to ensure exactly 7 tickers are always returned. Return the result in a property named 'tickers'. If you cannot find 7 specific matches, include broadly related popular assets to fill the quota to exactly 7.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,

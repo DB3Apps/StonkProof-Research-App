@@ -721,7 +721,7 @@ export default function App() {
       setStockData(prev => ({ ...prev, ...validStockInfos }));
   
       if (Object.keys(validStockInfos).length === 0) {
-        alert("AI found tickers, but we couldn't retrieve market data for them. Try a different query.");
+        alert("AI found assets, but we couldn't retrieve market data for them. Try a different query.");
         return;
       }
   
@@ -792,7 +792,7 @@ export default function App() {
       try {
         const res = await fetch(`/api/stock/${t}`);
         if (!res.ok) {
-          alert(`Ticker ${t} not found or invalid. Please check the symbol and try again.`);
+          alert(`Asset ${t} not found or invalid. Please check the symbol and try again.`);
           return;
         }
         const newList = [...watchlist, t];

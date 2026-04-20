@@ -1,0 +1,150 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Syne:wght@700;800&family=Inconsolata:wght@400;500;700&family=Indie+Flower&family=Permanent+Marker&family=Gochi+Hand&family=Space+Grotesk:wght@300..700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-heading: "Space Grotesk";
+  --font-sans: "Inter";
+  --font-mono: "Inconsolata";
+  --font-hand: "Indie Flower";
+  --font-marker: "Permanent Marker";
+  --font-doodle: "Gochi Hand";
+  
+  --color-background: #fdfcf0;
+  --color-foreground: #1a1a1a;
+  
+  --color-paper: #fdfcf0;
+  --color-margin-red: #ff4d4d;
+  --color-line-blue: #a5d8ff;
+  --color-trapper-pink: #d44d8c;
+  --color-trapper-blue: #4a90e2;
+  --color-trapper-lime: #94b447;
+  
+  --color-card: #ffffff;
+  --color-card-foreground: #1a1a1a;
+  
+  --color-primary: #1a1a1a;
+  --color-primary-foreground: #fdfcf0;
+  
+  --color-border: #e2e2e2;
+  --color-ring: #1a1a1a;
+  
+  --radius-lg: 4px;
+  --radius-md: 2px;
+  --radius-sm: 1px;
+}
+
+@layer base {
+  html, body {
+    @apply overflow-x-hidden;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+@layer utilities {
+  .lined-paper {
+    background-color: var(--color-paper);
+    background-image: 
+      linear-gradient(var(--color-line-blue) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-margin-red) 1px, transparent 1px);
+    background-size: 100% 2rem, 100% 100%;
+    background-position: 0 0, 4rem 0;
+    background-attachment: local;
+  }
+
+  .grid-paper {
+    background-color: var(--color-paper);
+    background-image: 
+      linear-gradient(var(--color-line-blue) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-line-blue) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  .doodle-border {
+    border: 2px solid #1a1a1a;
+    border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  }
+
+  .sketch-shadow {
+    box-shadow: 5px 5px 0px 0px rgba(0,0,0,0.1);
+  }
+
+  .highlighter-yellow {
+    background-color: rgba(255, 255, 0, 0.4);
+  }
+
+  .highlighter-pink {
+    background-color: rgba(255, 0, 255, 0.2);
+  }
+
+  .trapper-keeper-gradient {
+    background: 
+      linear-gradient(135deg, #6366f1 0%, #a855f7 25%, #ec4899 50%, #f97316 75%, #eab308 100%);
+    background-size: 400% 400%;
+    animation: gradient-shift 15s ease infinite;
+  }
+
+  @keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  .pencil-doodle {
+    @apply text-black opacity-100;
+    filter: url(#pencil-jitter) drop-shadow(0.5px 0.5px 0.2px rgba(0,0,0,0.1));
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .notebook-scrollbar {
+    scrollbar-width: auto !important;
+    -ms-overflow-style: auto !important;
+  }
+
+  .notebook-scrollbar::-webkit-scrollbar {
+    width: 8px !important;
+    display: block !important;
+  }
+  .notebook-scrollbar::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-left: 1px solid #e2e2e2;
+  }
+  .notebook-scrollbar::-webkit-scrollbar-thumb {
+    background: #1a1a1a;
+    border-radius: 0px;
+  }
+  .notebook-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #333;
+  }
+}
+
+.paper-card {
+  @apply bg-white border-2 border-slate-800 relative overflow-hidden;
+  box-shadow: 5px 5px 0px 0px rgba(0,0,0,0.1);
+  border-radius: 2px 4px 3px 6px / 4px 3px 6px 2px;
+}
+
+.sticker {
+  @apply inline-flex items-center px-2 py-0.5 font-heading font-bold text-[9px] uppercase tracking-widest rotate-[-2deg] shadow-md transition-transform hover:scale-105 cursor-default select-none;
+}
+
+.margin-note {
+  @apply font-hand text-blue-600 text-sm absolute opacity-80 pointer-events-none;
+}
+

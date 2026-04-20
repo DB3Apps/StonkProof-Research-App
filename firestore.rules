@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Shared Helpers
+    // ===============================================================
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.size() <= 256 && email.matches('^[^@]+@[^@]+\\.[^@]+$');
+    }
+
+    // Admin Check
+    // - Explicit list for high security
+    // - Check verified status
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email_verified == true && (
+               request.auth.token.email == "Dusty.Black7520@gmail.com" || 
+               exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+             );
+    }
+
+    // ===============================================================
+    // userProfile Rules (/users/{userId})
+    // ===============================================================
+    
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             (data.get('displayName', '') is string) &&
+             (data.get('displayName', '').size() <= 100);
+    }
+
+    match /users/{userId} {
+      // Permission: Only owner or admin can read profiles
+      allow get: if isOwner(userId) || isAdmin();
+      // Lists are blocked for privacy
+      allow list: if isAdmin();
+      
+      // Permission: User can manage their own profile
+      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow update: if isOwner(userId) && isValidUserProfile(request.resource.data) && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastLogin', 'email'])
+      );
+
+      // ===============================================================
+      // watchlist Rules (/users/{userId}/data/watchlist)
+      // ===============================================================
+      
+      function isValidWatchlist(data) {
+        return data.keys().hasAll(['userId', 'tickers']) &&
+               data.userId == request.auth.uid &&
+               data.tickers is list &&
+               data.tickers.size() <= 200;
+      }
+
+      match /data/watchlist {
+        allow get: if isOwner(userId) || isAdmin();
+        // create/update
+        allow write: if isOwner(userId) && (
+          // validate on writes
+          (request.resource != null && isValidWatchlist(request.resource.data)) ||
+          // delete
+          (request.resource == null)
+        );
+      }
+
+      // ===============================================================
+      // researchNote Rules (/users/{userId}/notes/{noteId})
+      // ===============================================================
+      
+      function isValidNote(data) {
+        return data.keys().hasAll(['userId', 'ticker', 'content']) &&
+               data.userId == request.auth.uid &&
+               data.ticker is string && data.ticker.size() <= 32 &&
+               data.content is string && data.content.size() <= 10000;
+      }
+
+      match /notes/{noteId} {
+        allow get: if isOwner(userId) || isAdmin();
+        allow list: if isOwner(userId) || isAdmin();
+        
+        allow create: if isOwner(userId) && isValidNote(request.resource.data);
+        allow update: if isOwner(userId) && isValidNote(request.resource.data) && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'createdAt', 'updatedAt'])
+        );
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

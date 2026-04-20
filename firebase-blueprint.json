@@ -1,0 +1,55 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "User Profile",
+      "description": "Stores user preferences and metadata.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID from Firebase Auth" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLogin": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "watchlist": {
+      "title": "Watchlist",
+      "description": "A user's saved stock tickers.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "tickers": { "type": "array", "items": { "type": "string" } },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "tickers"]
+    },
+    "researchNote": {
+      "title": "Research Note",
+      "description": "User-generated notes on specific stocks.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "ticker": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "ticker", "content"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "User profile documents"
+    },
+    "/users/{userId}/data/watchlist": {
+      "schema": "watchlist",
+      "description": "User's stock watchlist"
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": "researchNote",
+      "description": "User's research notes"
+    }
+  }
+}

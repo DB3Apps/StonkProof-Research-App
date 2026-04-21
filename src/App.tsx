@@ -62,11 +62,10 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, calculateLinearRegression, calculateRSI, calculateSpiciness, calculateResearchGrade, getGradeColor } from "@/lib/utils";
-import { getTickersFromAI, ai, summarizeBusiness, analyzeSentiment } from "@/lib/gemini";
+import { getTickersFromAI, ai, summarizeBusiness, analyzeSentiment, getCombinedAnalysis } from "@/lib/gemini";
 
-import { auth, signInWithGoogle, logout, getDb, handleFirestoreError, OperationType } from "./firebase";
-import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, onSnapshot, setDoc, Timestamp } from "firebase/firestore";
+import { auth, signInWithGoogle, logout, getDb, handleFirestoreError, OperationType, doc, onSnapshot, setDoc, Timestamp, onAuthStateChanged } from "./firebase";
+import { User } from "firebase/auth";
 // --- Types ---
 interface StockInfo {
   symbol: string;
@@ -405,6 +404,25 @@ export default function App() {
   const [isWatchlistExpanded, setIsWatchlistExpanded] = useState(false);
   const [showGradeModal, setShowGradeModal] = useState(false);
   
+  const resetApp = () => {
+    setQuery("");
+    setTickers([]);
+    setAllSeenTickers([]);
+    setDiscoveryPage(0);
+    setSelectedTicker(null);
+    setStockData({});
+    setHistoryData({});
+    setHistoryError({});
+    setLoading(false);
+    setLoadingDetails(false);
+    setLoadingSummary(false);
+    setLoadingAI({});
+    setLoadingChart({});
+    setNote("");
+    setStep('instructions');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  
   // Zoom State
   const [zoomState, setZoomState] = useState({
     left: 'dataMin',
@@ -442,6 +460,10 @@ export default function App() {
       setDeferredPrompt(null);
     }
   };
+
+  useEffect(() => {
+    console.log("App mounted. Auth Ready:", isAuthReady, "Step:", step);
+  }, [isAuthReady, step]);
 
   // Auth Listener
   useEffect(() => {
@@ -536,7 +558,13 @@ export default function App() {
   };
 
   const fetchStockInfo = async (ticker: string) => {
-    if (stockData[ticker]) return stockData[ticker];
+    if (stockData[ticker]) {
+      // If we already have stock data, but no AI analysis yet, trigger it
+      if (stockData[ticker].longBusinessSummary && !stockData[ticker].conciseSummary) {
+        fetchAnalysis(ticker, false, stockData[ticker]);
+      }
+      return stockData[ticker];
+    }
     try {
       const res = await fetch(`/api/stock/${ticker}`);
       if (res.status === 404) {
@@ -613,9 +641,9 @@ export default function App() {
           [ticker]: { ...current, rsi, spiciness, researchGrade: grade }
         };
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setHistoryError(prev => ({ ...prev, [ticker]: "Failed to connect to data engine" }));
+      setHistoryError(prev => ({ ...prev, [ticker]: e.message === 'Failed to fetch' || e.message?.includes('Failed to fetch') ? "Network connection lost. Please refresh the page." : "Failed to connect to data engine" }));
     } finally {
       if (isFullChart) {
         setLoadingChart(prev => ({ ...prev, [ticker]: false }));
@@ -627,7 +655,7 @@ export default function App() {
 
   const handleSearch = async (e?: React.FormEvent, customQuery?: string, isLoadMore = false) => {
     e?.preventDefault();
-    if (loading) return; // Prevent concurrent requests
+    if (loading) return;
     
     const activeQuery = customQuery || query;
     if (!activeQuery.trim()) return;
@@ -635,7 +663,6 @@ export default function App() {
     console.log("handleSearch: Starting research for", activeQuery);
     
     try {
-      // 1. Get suggestions from AI, excluding already found tickers for context
       let results: string[] = [];
       const excluded = isLoadMore ? allSeenTickers : [];
       try {
@@ -644,7 +671,7 @@ export default function App() {
         console.log("handleSearch: Got results", results);
       } catch (err: any) {
         console.error("Search failure:", err);
-        alert(`Research Engine encountered an issue:\n\n${err.message || 'Please try a different query type.'}`);
+        alert(`Research Engine encountered an issue:\n\n${(err.message === 'Failed to fetch' ? 'Connection to AI service failed. Please check your connection.' : err.message) || 'Please try a different query type.'}`);
         return;
       }
       
@@ -657,94 +684,12 @@ export default function App() {
         return;
       }
       
-      // 2. Fetch real-time prices for all suggestions to verify constraints
-      const stockInfos: Record<string, StockInfo> = {};
-      for (const t of results) {
-        if (Object.keys(stockInfos).length >= 5) break; 
-        console.log("handleSearch: Fetching stock info for", t);
-        try {
-          let attempts = 0;
-          let success = false;
-          
-          while (attempts < 2 && !success) {
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), 8000); // 8s timeout
-            
-            try {
-              const res = await fetch(`/api/stock/${t}`, { signal: controller.signal });
-              clearTimeout(id);
-              if (res.ok) {
-                const text = await res.text();
-                if (text) {
-                  const data = JSON.parse(text);
-                  if (data && !data.error) {
-                    stockInfos[t] = data;
-                    success = true;
-                    console.log("handleSearch: Got info for", t);
-                  }
-                }
-              } else if (res.status === 429) {
-                console.warn(`Rate limited for ${t}, waiting longer... (attempt ${attempts + 1})`);
-                await new Promise(resolve => setTimeout(resolve, 1000 * (attempts + 1)));
-                attempts++;
-              } else {
-                break; // Other error, don't retry
-              }
-            } catch (err) {
-              clearTimeout(id);
-              throw err;
-            }
-          }
-          
-          // Consistent delay between symbols to avoid rate limits
-          await new Promise(resolve => setTimeout(resolve, 600));
-        } catch (err) {
-          console.error(`Verification failed for ${t}:`, err);
-        }
-      }
-      console.log("handleSearch: Finished fetching stock infos");
-      
-      // Update global stock data cache
-      
-      // Filter incomplete data
-      const validStockInfos: Record<string, StockInfo> = {};
-      for (const t of Object.keys(stockInfos)) {
-        const info = stockInfos[t];
-        // Loosened validation: focus on primary ticker info existence rather than strict business summary at discovery stage
-        if (info.shortName && info.regularMarketPrice !== undefined) {
-          validStockInfos[t] = info;
-        } else {
-          console.warn(`Dropping incomplete stock: ${t}`);
-        }
-      }
-      
-      setStockData(prev => ({ ...prev, ...validStockInfos }));
-  
-      if (Object.keys(validStockInfos).length === 0) {
-        alert("AI found assets, but we couldn't retrieve market data for them. Try a different query.");
-        return;
-      }
-  
-      // 3. Apply client-side price filtering if price constraint detected
-      // Look for price-specific constraints like "under $50" or "below 20 dollars"
-      const priceMatch = activeQuery.match(/(?:price\s*(?:under|below|less|is\s*[\<\$]))\s*(\d+)|\$\s*(\d+)/i);
-      const limit = priceMatch ? parseFloat(priceMatch[1] || priceMatch[2]) : null;
-      
-      // We already have validStockInfos (keys are tickers that passed validation)
-      let candidates = Object.keys(validStockInfos);
-      
-      if (limit !== null) {
-        candidates = candidates.filter(t => {
-          const price = validStockInfos[t]?.regularMarketPrice;
-          return price !== undefined && price <= limit;
-        });
-      }
-  
-      // Now strictly take the first 5 candidates that passed everything
-      const finalResults = candidates.slice(0, 5);
+      // We will trust the AI's selection and let the background useEffect fetch the data.
+      // This prevents the UI from hanging for 10 seconds and bypasses Yahoo Finance sequential rate limits.
+      // Slice to maximum 5 results to keep UI clean.
+      const finalResults = results.slice(0, 5);
   
       if (isLoadMore) {
-        // Transition smoothly by replacing the current 5 with the next 5
         window.scrollTo({ top: 0, behavior: 'smooth' });
         setTickers(finalResults);
         setAllSeenTickers(prev => [...prev, ...finalResults]);
@@ -817,7 +762,7 @@ export default function App() {
       // Stage 1: Absolute Priority - Metadata & Preliminary Grade
       // We start fetching both in parallel for max throughput
       fetchStockInfo(selectedTicker).then(data => {
-        if (data?.longBusinessSummary) fetchAnalysis(selectedTicker);
+        if (data && data.longBusinessSummary) fetchAnalysis(selectedTicker, false, data);
       });
       
       // Fetch 30-day "Lite" data first for the immediate Grade & Score
@@ -971,11 +916,11 @@ export default function App() {
     return stops;
   }, [currentHistory]);
 
-  const fetchAnalysis = async (ticker: string, silent = false) => {
+  const fetchAnalysis = async (ticker: string, silent = false, overrideStock: any = null) => {
     // Concurrency protection: don't fetch if already in progress for this ticker
     if (fetchingAnalysisRef.current.has(ticker)) return;
     
-    const stock = stockData[ticker];
+    const stock = overrideStock || stockData[ticker];
     if (!stock || !stock.longBusinessSummary) return;
     if (stock.sentiment !== undefined && stock.conciseSummary) return;
 
@@ -985,20 +930,30 @@ export default function App() {
       
       let summary = stock.conciseSummary;
       let catalyst = stock.newsCatalyst;
+      let sentiment = stock.sentiment;
 
-      if (!summary) {
-        // Only use expensive search grounding for active research (silent = false)
-        const aiResponse = await summarizeBusiness(stock.longBusinessSummary, !silent);
-        summary = aiResponse.summary;
-        catalyst = aiResponse.newsCatalyst;
+      if (!summary || sentiment === undefined) {
+        if (!silent) {
+           const combined = await getCombinedAnalysis(stock.longBusinessSummary, true);
+           summary = combined.summary;
+           catalyst = combined.newsCatalyst;
+           sentiment = combined.sentiment;
+        } else {
+           // Do fallback silently
+           if (!summary) {
+             const aiResponse = await summarizeBusiness(stock.longBusinessSummary, false);
+             summary = aiResponse.summary;
+             catalyst = aiResponse.newsCatalyst;
+           }
+           if (sentiment === undefined) {
+             sentiment = await analyzeSentiment(summary || stock.longBusinessSummary, false);
+           }
+        }
       }
-
-      // Sentiment also respects search grounding preference
-      const sentiment = stock.sentiment === undefined ? await analyzeSentiment(summary || stock.longBusinessSummary, !silent) : stock.sentiment;
       
       setStockData(prev => {
         const current = prev[ticker] || {};
-        const { grade } = calculateResearchGrade(sentiment, current.rsi, current.spiciness);
+        const { grade } = calculateResearchGrade(sentiment || 5, current.rsi, current.spiciness);
         return {
           ...prev,
           [ticker]: { ...current, conciseSummary: summary, newsCatalyst: catalyst, sentiment, researchGrade: grade }
@@ -1084,7 +1039,7 @@ export default function App() {
                     title="Click to Logout"
                   >
                     <img 
-                      src={user.photoURL || ""} 
+                      src={user.photoURL || `https://api.dicebear.com/7.x/notionists/svg?seed=${user.uid}`} 
                       alt="" 
                       className="w-14 h-14 rounded-full border-2 border-slate-900 sketch-shadow bg-white" 
                       referrerPolicy="no-referrer" 
@@ -1256,7 +1211,7 @@ if (step === 'prompt') {
                   Download App
                 </Button>
                 <Button 
-                  onClick={() => setStep('instructions')}
+                  onClick={resetApp}
                   variant="ghost"
                   className="w-full mt-4 h-12 text-slate-500 hover:text-slate-900 rounded-none font-heading font-bold text-sm uppercase tracking-widest transition-all"
                 >
@@ -1298,7 +1253,7 @@ if (step === 'prompt') {
           {/* Header */}
           <header className="border-b-2 border-slate-900 bg-gradient-to-r from-white via-slate-50 to-white backdrop-blur-xl z-50 w-full overflow-x-hidden relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4 cursor-pointer" onClick={() => setStep('instructions')}>
+          <div className="flex items-center gap-4 cursor-pointer" onClick={resetApp}>
             <SPRLogo size={20} className="rotate-0 shadow-none border" />
             <div className="relative">
               <h1 className="text-2xl font-heading font-extrabold tracking-tight hidden sm:block uppercase">StonkProof Research</h1>
@@ -1778,15 +1733,17 @@ if (step === 'prompt') {
                   <div className="h-3 w-3 rounded-full bg-trapper-pink" />
                   <h3 className="font-heading text-lg font-bold uppercase tracking-widest">Discovery Results</h3>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  disabled={loading}
-                  className="h-8 font-heading text-[10px] font-bold uppercase tracking-widest gap-2 hover:bg-slate-100" 
-                  onClick={() => handleSearch(undefined, undefined, true)}
-                >
-                  <Plus size={12} className={cn(loading && "animate-pulse")} /> Next 5
-                </Button>
+                <div className="bg-slate-100 border border-slate-300 p-1 inline-block">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    disabled={loading}
+                    className="h-8 font-heading text-[10px] font-bold uppercase tracking-widest gap-2 hover:bg-slate-200" 
+                    onClick={() => handleSearch(undefined, undefined, true)}
+                  >
+                    <Plus size={12} className={cn(loading && "animate-pulse")} /> Next 5
+                  </Button>
+                </div>
               </div>
               <div className={cn(
                 "grid grid-cols-1 md:grid-cols-2 gap-6 relative min-h-[400px] transition-opacity duration-500 max-w-5xl mx-auto",

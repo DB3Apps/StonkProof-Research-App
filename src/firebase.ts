@@ -22,8 +22,8 @@ export const getDb = () => {
     return _db;
 };
 
-// For backward compatibility until we refactor all usages
-// export const db = getDb();
+// Export db to maintain compatibility
+export const db = getDb();
 export const googleProvider = new GoogleAuthProvider();
 
 // Error Handling
@@ -71,7 +71,8 @@ export const signInWithGoogle = async () => {
     const user = result.user;
     
     // Sync user profile
-    await setDoc(doc(collection(getDb(), "users"), user.uid), {
+    const db = getDb();
+    await setDoc(doc(db, "users", user.uid), {
       uid: user.uid,
       email: user.email,
       displayName: user.displayName,
@@ -88,3 +89,6 @@ export const signInWithGoogle = async () => {
 };
 
 export const logout = () => signOut(auth);
+
+// Export firestore methods so they are guaranteed to use the same module instance
+export { doc, onSnapshot, setDoc, getDoc, collection, query, where, Timestamp, onAuthStateChanged };

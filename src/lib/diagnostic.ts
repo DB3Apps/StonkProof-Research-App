@@ -1,5 +1,4 @@
-import { getDb, auth } from "../firebase";
-import { getDoc, doc } from "firebase/firestore";
+import { getDb, auth, getDoc, doc } from "../firebase";
 import { ai } from "./gemini";
 
 export interface DiagnosticResult {
@@ -36,9 +35,10 @@ export async function runFullDiagnostic(): Promise<DiagnosticResult[]> {
   // 2. Check Firestore Connectivity
   try {
     const start = Date.now();
+    const dbInstance = getDb();
     // Use a non-existent doc just to check connectivity
-    if (getDb()) {
-       await getDoc(doc(getDb(), 'system', 'connectivity_check'));
+    if (dbInstance) {
+       await getDoc(doc(dbInstance, 'system', 'connectivity_check'));
        results.push({
          service: 'Firestore',
          status: 'ok',

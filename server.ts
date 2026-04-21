@@ -66,7 +66,7 @@ async function startServer() {
   app.get('/api/stock/:ticker', async (req, res) => {
     try {
       const { ticker } = req.params;
-      const normalizedTicker = ticker.toUpperCase();
+      const normalizedTicker = ticker.toUpperCase().replace(/\./g, '-');
 
       // Check cache
       const cached = cache.quote.get(normalizedTicker);
@@ -95,7 +95,7 @@ async function startServer() {
       console.error(`Error fetching stock info for ${req.params.ticker}:`, error);
       
       // If Yahoo specifically says ticker not found
-      if (error.message?.includes('Not Found')) {
+      if (error.message?.includes('Not Found') || error.message?.includes('No data found')) {
         return res.status(404).json({ error: 'Ticker not found' });
       }
       
@@ -113,7 +113,7 @@ async function startServer() {
     try {
       const { ticker } = req.params;
       const days = parseInt(req.query.days as string, 10) || 365;
-      const normalizedTicker = ticker.toUpperCase();
+      const normalizedTicker = ticker.toUpperCase().replace(/\./g, '-');
       const cacheKey = `${normalizedTicker}_${days}`;
 
       // Check cache
@@ -139,7 +139,7 @@ async function startServer() {
     } catch (error: any) {
       console.error(`Error fetching history for ${req.params.ticker}:`, error);
       
-      if (error.message?.includes('Not Found')) {
+      if (error.message?.includes('Not Found') || error.message?.includes('No data found')) {
         return res.status(404).json({ error: 'Ticker history not found' });
       }
 

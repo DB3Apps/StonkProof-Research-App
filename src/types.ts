@@ -1,5 +1,3 @@
-import { Timestamp } from "firebase/firestore";
-
 export interface StockInfo {
   symbol: string;
   shortName?: string;
@@ -10,10 +8,16 @@ export interface StockInfo {
   marketCap?: number;
   longBusinessSummary?: string;
   conciseSummary?: string;
+  newsCatalyst?: string;
   currency?: string;
   sector?: string;
   industry?: string;
+  sentiment?: number;
+  rsi?: number;
+  spiciness?: number;
+  researchGrade?: string;
   fullExchangeName?: string;
+  news?: any[];
 }
 
 export interface HistoryData {
@@ -21,19 +25,6 @@ export interface HistoryData {
   displayDate: string;
   close: number;
   volume: number;
-}
-
-export interface WatchlistData {
-  userId: string;
-  tickers: string[];
-  updatedAt: Timestamp;
-}
-
-export interface NoteData {
-  userId: string;
-  ticker: string;
-  content: string;
-  createdAt: Timestamp;
 }
 
 export type AppStep = 'instructions' | 'prompt' | 'results' | 'download';

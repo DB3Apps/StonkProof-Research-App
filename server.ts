@@ -3,7 +3,8 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import yahooFinance from 'yahoo-finance2';
 
-// Initialize yahoo-finance2 instance correctly for v3+
+// In version 3 ESM, the default export is the YahooFinance class itself.
+// We must instantiate it to use it.
 const yahoo = new (yahooFinance as any)();
 
 // Simple in-memory cache to mitigate rate limits
@@ -13,16 +14,43 @@ const cache = {
 };
 const CACHE_TTL = 10 * 60 * 1000; // Increase to 10 minutes for quotes/summaries
 
+// Helper to fetch data with a fallback for crypto tickers (e.g., SOL -> SOL-USD)
+async function fetchWithCryptoFallback(ticker: string, fetchFn: (symbol: string) => Promise<any>) {
+  try {
+    const result = await fetchFn(ticker);
+    if (result) return result;
+    throw new Error('No result');
+  } catch (primaryError: any) {
+    // If primary failed and ticker doesn't already have a suffix, try -USD
+    if (!ticker.includes('-') && !ticker.includes('=')) {
+      try {
+        const fallbackSymbol = `${ticker}-USD`;
+        const result = await fetchFn(fallbackSymbol);
+        if (result) return result;
+      } catch (secondaryError) {
+        // Both failed, throw the primary error
+        throw primaryError;
+      }
+    }
+    throw primaryError;
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   // Globally disable validation to improve performance and stability
-  if (typeof yahoo.setGlobalConfig === 'function') {
-    yahoo.setGlobalConfig({
-      validation: { logErrors: false, logResults: false },
-      suppressNotices: ['yahooSurvey']
-    });
+  // and ensure we are using a configured instance
+  try {
+    if (yahoo && typeof yahoo.setGlobalConfig === 'function') {
+      yahoo.setGlobalConfig({
+        validation: { logErrors: false, logResults: false },
+        suppressNotices: ['yahooSurvey']
+      });
+    }
+  } catch (e) {
+    console.error("Failed to set global config for yahoo-finance2", e);
   }
 
   // Middleware to parse JSON
@@ -32,7 +60,7 @@ async function startServer() {
   app.get('/api/diagnostic', async (req, res) => {
     try {
       const start = Date.now();
-      const testQuote = await yahoo.quote('AAPL');
+      const testQuote = await (yahoo as any).quote('AAPL');
       res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -40,7 +68,7 @@ async function startServer() {
           yahooFinance: {
             status: 'ok',
             latency: Date.now() - start,
-            testData: testQuote.symbol
+            testData: testQuote?.symbol
           },
           env: {
             geminiKeySet: !!process.env.GEMINI_API_KEY,
@@ -74,28 +102,29 @@ async function startServer() {
         return res.json(cached.data);
       }
 
-      const [quote, summary] = await Promise.all([
-        yahoo.quote(normalizedTicker, {}, { validateResult: false }),
-        yahoo.quoteSummary(normalizedTicker, { modules: ["assetProfile"] }, { validateResult: false }).catch(() => null)
-      ]);
-
-      if (!quote) {
-        return res.status(404).json({ error: 'Stock not found' });
-      }
-
-      const combinedData = {
-        ...quote,
-        longBusinessSummary: summary?.assetProfile?.longBusinessSummary
+      const getCombined = async (symbol: string) => {
+        const quote = await (yahoo as any).quote(symbol, {}, { validateResult: false });
+        if (!quote) return null;
+        
+        const summary = await (yahoo as any).quoteSummary(symbol, { modules: ["assetProfile"] }, { validateResult: false }).catch(() => null);
+        return {
+          ...quote,
+          longBusinessSummary: summary?.assetProfile?.longBusinessSummary
+        };
       };
+
+      const combinedData = await fetchWithCryptoFallback(normalizedTicker, getCombined);
 
       // Update cache
       cache.quote.set(normalizedTicker, { data: combinedData, timestamp: Date.now() });
       res.json(combinedData);
     } catch (error: any) {
-      console.error(`Error fetching stock info for ${req.params.ticker}:`, error);
+      // Log as warn instead of error to avoid excessive noise for expected 404s
+      console.warn(`Error fetching stock info for ${req.params.ticker}:`, error.message);
       
       // If Yahoo specifically says ticker not found
-      if (error.message?.includes('Not Found') || error.message?.includes('No data found')) {
+      if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
+        console.warn(`Ticker not found or delisted: ${req.params.ticker}`);
         return res.status(404).json({ error: 'Ticker not found' });
       }
       
@@ -122,24 +151,26 @@ async function startServer() {
         return res.json(cached.data);
       }
 
-      const history = await yahoo.chart(normalizedTicker, {
-        period1: new Date(new Date().setDate(new Date().getDate() - days)),
-        interval: '1d'
-      }, { validateResult: false });
+      const getHistory = async (symbol: string) => {
+        const history = await (yahoo as any).chart(symbol, {
+          period1: new Date(new Date().setDate(new Date().getDate() - days)),
+          interval: '1d'
+        }, { validateResult: false });
+        
+        if (!history || !(history as any).quotes) return null;
+        return (history as any).quotes;
+      };
 
-      if (!history || !(history as any).quotes) {
-        return res.status(404).json({ error: 'History not found' });
-      }
-      
-      const data = (history as any).quotes;
+      const data = await fetchWithCryptoFallback(normalizedTicker, getHistory);
 
       // Update cache
       cache.history.set(cacheKey, { data, timestamp: Date.now() });
       res.json(data);
     } catch (error: any) {
-      console.error(`Error fetching history for ${req.params.ticker}:`, error);
+      // Log as warn instead of error to avoid excessive noise for expected 404s
+      console.warn(`Error fetching history for ${req.params.ticker}:`, error.message);
       
-      if (error.message?.includes('Not Found') || error.message?.includes('No data found')) {
+      if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
         return res.status(404).json({ error: 'Ticker history not found' });
       }
 

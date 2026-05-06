@@ -1,6 +1,4 @@
 {
-  const geminiApiKey = process.env.REACT_APP_GEMINI_API_KEY;
-  // Use with Gemini SDK
   "projectId": "gen-lang-client-0482451278",
   "appId": "1:193381718234:web:81dbaa61afa0a4f48e6de3",
   "authDomain": "gen-lang-client-0482451278.firebaseapp.com",

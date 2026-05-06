@@ -6,7 +6,7 @@ This document outlines our security commitments as required by the **FTC Safegua
 
 If you believe you have discovered a security vulnerability in this project, please **do not open a public issue**. Instead, report it immediately to our security team via email at:
 
-**[Insert Email Address Here, e.g., security@yourdomain.com]**
+**DB3app@gmail.com**
 
 Please include the following details in your report:
 - A clear description of the vulnerability.

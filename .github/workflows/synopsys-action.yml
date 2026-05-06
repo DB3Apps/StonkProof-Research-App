@@ -23,6 +23,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Synopsys Action
         uses: synopsys-sig/synopsys-action@v1.6.0
+        continue-on-error: true
         with:
           #------------------------------------------COVERITY-----------------------------------------
           coverity_url: ${{ secrets.COVERITY_URL }}

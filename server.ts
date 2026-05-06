@@ -124,7 +124,7 @@ async function startServer() {
       
       // If Yahoo specifically says ticker not found
       if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
-        console.warn(`Ticker not found or delisted: ${req.params.ticker}`);
+        console.info(`Ticker not found or delisted: ${req.params.ticker}`);
         return res.status(404).json({ error: 'Ticker not found' });
       }
       

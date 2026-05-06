@@ -97,6 +97,7 @@ export default function App() {
   };
   const [historyData, setHistoryData] = useState<Record<string, HistoryData[]>>({});
   const [historyError, setHistoryError] = useState<Record<string, string | null>>({});
+  const [stockErrors, setStockErrors] = useState<Record<string, string | null>>({});
   const [failedTickers, setFailedTickers] = useState<Set<string>>(new Set());
   const failedTickersRef = useRef<Set<string>>(new Set());
   
@@ -302,7 +303,8 @@ export default function App() {
     try {
       const res = await fetch(`/api/stock/${ticker}`);
       if (res.status === 404) {
-        console.warn(`Ticker ${ticker} not found`);
+        setStockErrors(prev => ({ ...prev, [ticker]: "Symbol not found" }));
+        console.info(`Ticker ${ticker} not found`);
         setFailedTickers(prev => new Set(prev).add(ticker));
         failedTickersRef.current.add(ticker);
         return null;
@@ -803,6 +805,7 @@ if (step === 'prompt') {
       <WatchlistHeader 
         watchlist={watchlist}
         stockData={stockData}
+        stockErrors={stockErrors}
         selectedTicker={selectedTicker}
         manualTicker={manualTicker}
         setManualTicker={setManualTicker}
@@ -941,6 +944,7 @@ if (step === 'prompt') {
       <WatchlistHeader 
         watchlist={watchlist}
         stockData={stockData}
+        stockErrors={stockErrors}
         selectedTicker={selectedTicker}
         manualTicker={manualTicker}
         setManualTicker={setManualTicker}

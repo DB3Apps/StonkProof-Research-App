@@ -9,6 +9,7 @@ import { StockInfo, AppStep } from "../types";
 interface WatchlistHeaderProps {
   watchlist: string[];
   stockData: Record<string, StockInfo>;
+  stockErrors: Record<string, string | null>;
   selectedTicker: string | null;
   manualTicker: string;
   setManualTicker: (val: string) => void;
@@ -23,6 +24,7 @@ interface WatchlistHeaderProps {
 export const WatchlistHeader = ({
   watchlist,
   stockData,
+  stockErrors,
   selectedTicker,
   manualTicker,
   setManualTicker,

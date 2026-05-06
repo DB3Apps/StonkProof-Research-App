@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import yahooFinance from 'yahoo-finance2';
+import rateLimit from 'express-rate-limit';
 
 // In version 3 ESM, the default export is the YahooFinance class itself.
 // We must instantiate it to use it.
@@ -192,8 +193,14 @@ async function startServer() {
   } else {
     // Production: serve static files
     const distPath = path.join(process.cwd(), 'dist');
+    const spaFallbackLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 100, // max 100 requests per IP per window
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', spaFallbackLimiter, (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

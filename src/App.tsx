@@ -65,7 +65,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn, getGradeColor, calculateRSI, calculateSpiciness, calculateResearchGrade } from "@/lib/utils";
 import { getTickersFromAI, getCombinedAnalysis, getCombinedAnalysisStream } from "@/lib/gemini";
 
-import { auth, db, handleFirestoreError, OperationType, doc, onSnapshot, setDoc, Timestamp, onAuthStateChanged, signInWithGoogle, logout } from "./firebase";
+import { auth, getDb, handleFirestoreError, OperationType, Timestamp, onAuthStateChanged, signInWithGoogle, logout, doc, onSnapshot, setDoc } from "./firebase";
 import { User } from "firebase/auth";
 import { WatchlistHeader } from "./components/WatchlistHeader";
 import { StockInfo, HistoryData, AppStep } from "./types";
@@ -215,7 +215,7 @@ export default function App() {
     }
 
     const path = `users/${user.uid}/data/watchlist`;
-    const dbInstance = db;
+    const dbInstance = getDb();
     if (!dbInstance) return;
     const unsubscribe = onSnapshot(doc(dbInstance, path), (snapshot) => {
       if (snapshot.exists()) {
@@ -230,7 +230,7 @@ export default function App() {
 
   // Sync watchlist to Firestore
   const syncWatchlist = async (newList: string[]) => {
-    const dbInstance = db;
+    const dbInstance = getDb();
     if (!user || !dbInstance) return;
     const path = `users/${user.uid}/data/watchlist`;
     try {
@@ -255,7 +255,7 @@ export default function App() {
     }
 
     const path = `users/${user.uid}/notes/${selectedTicker}`;
-    const dbInstance = db;
+    const dbInstance = getDb();
     if (!dbInstance) return;
     const unsubscribe = onSnapshot(doc(dbInstance, path), (snapshot) => {
       if (snapshot.exists()) {
@@ -272,7 +272,7 @@ export default function App() {
   }, [user, selectedTicker]);
 
   const saveNote = async () => {
-    const dbInstance = db;
+    const dbInstance = getDb();
     if (!user || !selectedTicker || !dbInstance) return;
     setIsSavingNote(true);
     const path = `users/${user.uid}/notes/${selectedTicker}`;

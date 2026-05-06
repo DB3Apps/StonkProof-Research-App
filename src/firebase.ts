@@ -13,12 +13,13 @@ export const getDb = () => {
     if (!_db) {
         try {
             _db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-            console.log("Firebase DB initialized successfully");
+            console.log("Firebase DB initialized successfully:", !!_db);
         } catch (e) {
             console.error("Failed to initialize Firestore:", e);
             throw new Error("Firestore initialization failed");
         }
     }
+    console.log("getDb returning _db:", _db);
     return _db;
 };
 

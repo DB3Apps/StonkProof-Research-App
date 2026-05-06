@@ -1,12 +1,9 @@
-concurrency:
-  name: Node.js CI
-
+name: Node.js CI
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -121,7 +121,7 @@ async function startServer() {
       res.json(combinedData);
     } catch (error: any) {
       // Log as warn instead of error to avoid excessive noise for expected 404s
-      console.warn(`Error fetching stock info for ${req.params.ticker}:`, error.message);
+      console.warn('Error fetching stock info for %s: %s', req.params.ticker, error.message);
       
       // If Yahoo specifically says ticker not found
       if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {

@@ -759,9 +759,6 @@ function AppContent() {
                 className="text-4xl sm:text-6xl md:text-8xl font-heading font-extrabold text-slate-900 drop-shadow-[2px_2px_0px_rgba(255,255,255,1)] break-words relative inline-block"
               >
                 StonkProof
-                <div className="absolute -top-4 -right-12 bg-trapper-pink text-white text-[10px] sm:text-xs font-bold px-3 py-1 -rotate-6 shadow-lg border-2 border-slate-900 uppercase tracking-widest">
-                  Beta
-                </div>
               </motion.h1>
               <p className="font-hand text-2xl text-slate-500 font-bold rotate-[-1deg]">Research Lab v1.0</p>
             </div>
@@ -1018,9 +1015,6 @@ if (step === 'prompt') {
             <div className="relative">
               <h1 className="text-2xl font-heading font-extrabold tracking-tight hidden sm:block uppercase">StonkProof Research</h1>
               <h1 className="text-2xl font-heading font-extrabold tracking-tight block sm:hidden">SPR</h1>
-              <div className="absolute -top-2 -right-10 bg-trapper-pink text-white text-[8px] font-bold px-1.5 py-0.5 rotate-12 shadow-sm border border-white uppercase tracking-widest hidden sm:block">
-                Beta
-              </div>
               <p className="font-sans text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">AI-Powered Research Lab</p>
             </div>
           </div>

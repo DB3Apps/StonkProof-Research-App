@@ -65,7 +65,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn, getGradeColor, calculateRSI, calculateSpiciness, calculateResearchGrade } from "@/lib/utils";
 import { getTickersFromAI, getCombinedAnalysis, getCombinedAnalysisStream } from "@/lib/gemini";
 
-import { auth, getDb, handleFirestoreError, OperationType, Timestamp, onAuthStateChanged, signInWithGoogle, logout, doc, onSnapshot, setDoc } from "./firebase";
+import { auth, getDb, handleFirestoreError, OperationType, Timestamp, onAuthStateChanged, signInWithGoogle, logout, onSnapshot, setDoc, db } from "./firebase";
+import { doc } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { WatchlistHeader } from "./components/WatchlistHeader";
 import { StockInfo, HistoryData, AppStep } from "./types";
@@ -263,7 +264,7 @@ function AppContent() {
     }
 
     const path = `users/${user.uid}/data/watchlist`;
-    const dbInstance = getDb();
+    const dbInstance = db;
     if (!dbInstance) return;
     const unsubscribe = onSnapshot(doc(dbInstance, path), (snapshot) => {
       if (snapshot.exists()) {
@@ -278,7 +279,7 @@ function AppContent() {
 
   // Sync watchlist to Firestore
   const syncWatchlist = async (newList: string[]) => {
-    const dbInstance = getDb();
+    const dbInstance = db;
     if (!user || !dbInstance) return;
     const path = `users/${user.uid}/data/watchlist`;
     try {
@@ -303,7 +304,7 @@ function AppContent() {
     }
 
     const path = `users/${user.uid}/notes/${selectedTicker}`;
-    const dbInstance = getDb();
+    const dbInstance = db;
     if (!dbInstance) return;
     const unsubscribe = onSnapshot(doc(dbInstance, path), (snapshot) => {
       if (snapshot.exists()) {
@@ -320,7 +321,7 @@ function AppContent() {
   }, [user, selectedTicker]);
 
   const saveNote = async () => {
-    const dbInstance = getDb();
+    const dbInstance = db;
     if (!user || !selectedTicker || !dbInstance) return;
     setIsSavingNote(true);
     const path = `users/${user.uid}/notes/${selectedTicker}`;

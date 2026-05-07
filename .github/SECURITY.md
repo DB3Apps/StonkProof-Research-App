@@ -1,24 +1,19 @@
-# Security Policy
+# Information Security & Privacy Policy
 
-## Supported Versions
+## 1. Commitment to Security
+[DB3 Apps] is committed to maintaining the highest standards of data security and privacy, aligning with the GLBA and the FTC Safeguard Rules.
 
-The following versions of StonkProof Research are currently being supported with security updates.
+## 2. Technical Controls
+*   **Data Encryption:** All sensitive data is encrypted at rest and in transit using AES-256 standards.
+*   **Authentication & Access:** 
+    *   Mandatory Multi-Factor Authentication (MFA) is enforced.
+    *   Strict Role-Based Access Control (RBAC) ensures users have access only to what is necessary for their role.
+*   **Session Management:** Automated session timeouts are implemented to protect unauthorized access.
+*   **Security Testing:** We conduct regular, automated security testing of our APIs and infrastructure.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.0.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+## 3. Data Privacy & Usage
+*   We follow data privacy guidelines aligning with GLBA.
+*   Data is used only for the stated purposes, and we provide clear disclosures regarding our data handling practices.
 
-## Reporting a Vulnerability
-
-We take the security of StonkProof Research seriously. If you believe you have found a security vulnerability, please do **not** open a public issue. Instead, please report it to our security team.
-
-Please email your report to: **Dusty.Black7520@gmail.com**
-
-We will acknowledge receipt of your report within 48 hours and will send you a more detailed response within 7 days.
-
-## Automated Traffic Policy
-This application uses **Vercel Bot Protection (BotID)** to ensure data integrity and prevent unauthorized scraping of market intelligence. If you are a security researcher using automated tools, please ensure they are properly identified.
-
----
-*Created via AI Studio Build*
+## 4. Versions Supported & Reporting Vulnerabilities
+We support current stable versions of our services. If you believe you have discovered a security vulnerability, please report it immediately [DB3app@gmail.com]. We request that you do not publicly disclose the issue until it has been addressed.

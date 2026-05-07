@@ -147,11 +147,11 @@ async function startServer() {
       res.json(combinedData);
     } catch (error: any) {
       // Log as warn instead of error to avoid excessive noise for expected 404s
-      console.warn(`Error fetching stock info for ${req.params.ticker}:`, error.message);
+      console.warn('Error fetching stock info for %s:', req.params.ticker, error.message);
       
       // If Yahoo specifically says ticker not found
       if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
-        console.info(`Ticker not found or delisted: ${req.params.ticker}`);
+        console.info('Ticker not found or delisted: %s', req.params.ticker);
         return res.status(404).json({ error: 'Ticker not found' });
       }
       
@@ -195,8 +195,7 @@ async function startServer() {
       res.json(data);
     } catch (error: any) {
       // Log as warn instead of error to avoid excessive noise for expected 404s
-      const sanitizedTicker = req.params.ticker.replace(/[\n\r]/g, '');
-      console.warn(`Error fetching history for ${sanitizedTicker}:`, error.message);
+      console.warn('Error fetching history for %s:', req.params.ticker, error.message);
       
       if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
         return res.status(404).json({ error: 'Ticker history not found' });

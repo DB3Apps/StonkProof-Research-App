@@ -195,7 +195,7 @@ async function startServer() {
       res.json(data);
     } catch (error: any) {
       // Log as warn instead of error to avoid excessive noise for expected 404s
-      console.warn('Error fetching history for %s:', req.params.ticker, error.message);
+      console.warn('Error fetching history for %s: %s', req.params.ticker, error.message);
       
       if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
         return res.status(404).json({ error: 'Ticker history not found' });

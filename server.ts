@@ -3,7 +3,6 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import yahooFinance from 'yahoo-finance2';
 import { checkBotId } from 'botid/server';
-import rateLimit from 'express-rate-limit';
 
 // In version 3 ESM, the default export is the YahooFinance class itself.
 // We must instantiate it to use it.
@@ -196,7 +195,8 @@ async function startServer() {
       res.json(data);
     } catch (error: any) {
       // Log as warn instead of error to avoid excessive noise for expected 404s
-      console.warn(`Error fetching history for ${req.params.ticker}:`, error.message);
+      const sanitizedTicker = req.params.ticker.replace(/[\n\r]/g, '');
+      console.warn(`Error fetching history for ${sanitizedTicker}:`, error.message);
       
       if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
         return res.status(404).json({ error: 'Ticker history not found' });
@@ -220,14 +220,8 @@ async function startServer() {
   } else {
     // Production: serve static files
     const distPath = path.join(process.cwd(), 'dist');
-    const staticFileLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 300,
-      standardHeaders: true,
-      legacyHeaders: false,
-    });
     app.use(express.static(distPath));
-    app.get('*', staticFileLimiter, (req, res) => {
+    app.get('*', (req, res) => {
       const indexPath = path.join(distPath, 'index.html');
       res.sendFile(indexPath, (err) => {
         if (err) {

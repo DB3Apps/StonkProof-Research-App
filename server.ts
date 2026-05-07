@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import yahooFinance from 'yahoo-finance2';
 import { checkBotId } from 'botid/server';
+import rateLimit from 'express-rate-limit';
 
 // In version 3 ESM, the default export is the YahooFinance class itself.
 // We must instantiate it to use it.
@@ -219,8 +220,14 @@ async function startServer() {
   } else {
     // Production: serve static files
     const distPath = path.join(process.cwd(), 'dist');
+    const staticFileLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 300,
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', staticFileLimiter, (req, res) => {
       const indexPath = path.join(distPath, 'index.html');
       res.sendFile(indexPath, (err) => {
         if (err) {

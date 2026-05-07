@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import yahooFinance from 'yahoo-finance2';
+import { checkBotId } from 'botid/server';
 
 // In version 3 ESM, the default export is the YahooFinance class itself.
 // We must instantiate it to use it.
@@ -55,6 +56,32 @@ async function startServer() {
 
   // Middleware to parse JSON
   app.use(express.json());
+
+  // Bot Protection Middleware
+  const botProtectionMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    // Only run in production (or if specifically testing)
+    if (process.env.NODE_ENV === 'development') return next();
+
+    try {
+      const verification = await checkBotId({
+        advancedOptions: {
+          headers: req.headers
+        }
+      });
+
+      if (verification.isBot && !verification.isVerifiedBot) {
+        console.warn(`[BotID] Blocked suspected bot request to ${req.originalUrl}`);
+        return res.status(403).json({ error: 'Access denied: Automated traffic detected' });
+      }
+      next();
+    } catch (error) {
+      console.error('BotID check error:', error);
+      next();
+    }
+  };
+
+  // Apply bot protection to all API routes
+  app.use('/api', botProtectionMiddleware);
 
   // API diagnostic endpoint
   app.get('/api/diagnostic', async (req, res) => {

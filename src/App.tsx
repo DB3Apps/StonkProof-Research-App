@@ -77,6 +77,7 @@ import { ResearchNotes } from "./components/research/ResearchNotes";
 import { DiscoveryResults } from "./components/research/DiscoveryResults";
 
 import { Analytics } from "@vercel/analytics/react";
+import { initBotId } from "botid/client/core";
 
 // --- App Component ---
 export default function App() {
@@ -89,6 +90,41 @@ export default function App() {
 }
 
 function AppContent() {
+  useEffect(() => {
+    // BotID (Vercel Bot Protection) hooks into window.fetch and XMLHttpRequest.
+    // In the AI Studio preview environment (iframe), window.fetch is often a non-writable getter,
+    // which causes initBotId to throw an error. We skip initialization in the preview
+    // as it is intended for production deployment on Vercel.
+    const isDevelopment = window.location.hostname.includes('ais-dev') || 
+                         window.location.hostname.includes('ais-pre') ||
+                         window.location.hostname === 'localhost';
+
+    if (isDevelopment) {
+      console.info("BotID: Client-side initialization skipped in development/preview environment.");
+      return;
+    }
+
+    try {
+      // Final check: ensure fetch is actually writable before letting the library attempt to patch it
+      const descriptor = Object.getOwnPropertyDescriptor(window, "fetch");
+      if (descriptor && !descriptor.writable && !descriptor.set && !descriptor.configurable) {
+        console.warn("BotID: window.fetch is not writable in this environment. Skipping instrumentation.");
+        return;
+      }
+
+      initBotId({
+        protect: [
+          { path: "/api/stock/*", method: "GET" },
+          { path: "/api/history/*", method: "GET" },
+        ],
+      });
+    } catch (error) {
+      // Silently catch and log as info/warn to avoid triggering error boundaries or alarming the user
+      // in environments where patching global APIs is restricted.
+      console.warn("BotID client-side instrumentation could not be initialized:", error);
+    }
+  }, []);
+
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [query, setQuery] = useState("");

@@ -76,8 +76,19 @@ import { NewsFeed } from "./components/research/NewsFeed";
 import { ResearchNotes } from "./components/research/ResearchNotes";
 import { DiscoveryResults } from "./components/research/DiscoveryResults";
 
+import { Analytics } from "@vercel/analytics/react";
+
 // --- App Component ---
 export default function App() {
+  return (
+    <>
+      <AppContent />
+      <Analytics />
+    </>
+  );
+}
+
+function AppContent() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [query, setQuery] = useState("");

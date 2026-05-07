@@ -21,15 +21,6 @@ export default defineConfig(({mode}) => {
       outDir: 'dist',
       assetsDir: 'assets',
       emptyOutDir: true,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom'],
-            'vendor-recharts': ['recharts'],
-            'vendor-motion': ['motion'],
-          }
-        }
-      }
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

@@ -2,7 +2,6 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import yahooFinance from 'yahoo-finance2';
-import rateLimit from 'express-rate-limit';
 
 // In version 3 ESM, the default export is the YahooFinance class itself.
 // We must instantiate it to use it.
@@ -121,7 +120,7 @@ async function startServer() {
       res.json(combinedData);
     } catch (error: any) {
       // Log as warn instead of error to avoid excessive noise for expected 404s
-      console.warn('Error fetching stock info for %s: %s', req.params.ticker, error.message);
+      console.warn(`Error fetching stock info for ${req.params.ticker}:`, error.message);
       
       // If Yahoo specifically says ticker not found
       if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
@@ -169,7 +168,7 @@ async function startServer() {
       res.json(data);
     } catch (error: any) {
       // Log as warn instead of error to avoid excessive noise for expected 404s
-      console.warn('Error fetching history for %s: %s', req.params.ticker, error.message);
+      console.warn(`Error fetching history for ${req.params.ticker}:`, error.message);
       
       if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
         return res.status(404).json({ error: 'Ticker history not found' });
@@ -193,14 +192,8 @@ async function startServer() {
   } else {
     // Production: serve static files
     const distPath = path.join(process.cwd(), 'dist');
-    const spaFallbackLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 100, // max 100 requests per IP per window
-      standardHeaders: true,
-      legacyHeaders: false,
-    });
     app.use(express.static(distPath));
-    app.get('*', spaFallbackLimiter, (req, res) => {
+    app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

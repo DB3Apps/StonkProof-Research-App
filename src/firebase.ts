@@ -3,20 +3,8 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signO
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, query, where, Timestamp } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-// Load API key from environment variable
-const apiKey = process.env.REACT_APP_FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY;
-if (!apiKey) {
-  console.warn('Firebase API key not found in environment variables. Firebase authentication may not work.');
-}
-
-// Merge config with API key
-const firebaseConfigWithApiKey = {
-  ...firebaseConfig,
-  apiKey: apiKey
-};
-
 // Initialize Firebase
-const app = initializeApp(firebaseConfigWithApiKey);
+const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 // Use a getter to ensure db is initialized correctly and safely

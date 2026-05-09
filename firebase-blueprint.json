@@ -36,6 +36,20 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "ticker", "content"]
+    },
+    "researchList": {
+      "title": "Research List",
+      "description": "User-created curated lists of stocks.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "tickers": { "type": "array", "items": { "type": "string" }, "maxItems": 10 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "tickers"]
     }
   },
   "firestore": {
@@ -50,6 +64,10 @@
     "/users/{userId}/notes/{noteId}": {
       "schema": "researchNote",
       "description": "User's research notes"
+    },
+    "/users/{userId}/researchLists/{listId}": {
+      "schema": "researchList",
+      "description": "User generated research lists"
     }
   }
 }

@@ -13,7 +13,7 @@ interface WatchlistHeaderProps {
   selectedTicker: string | null;
   manualTicker: string;
   setManualTicker: (val: string) => void;
-  handleManualAdd: (e: React.FormEvent) => void;
+  handleManualAdd: (e?: React.FormEvent | string) => void;
   isWatchlistExpanded: boolean;
   setIsWatchlistExpanded: (val: boolean) => void;
   removeFromWatchlist: (ticker: string) => void;
@@ -37,7 +37,7 @@ export const WatchlistHeader = ({
 }: WatchlistHeaderProps) => (
   <div className="relative z-[60] w-full px-4 sm:px-6 pt-2">
     <div className="max-w-7xl mx-auto space-y-2">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr,auto] gap-2 md:gap-4">
         <div 
           className={cn(
             "h-14 trapper-keeper-gradient border-2 border-slate-900 sketch-shadow flex items-center px-4 cursor-pointer hover:brightness-110 transition-all relative overflow-hidden",
@@ -53,6 +53,19 @@ export const WatchlistHeader = ({
           <div className="flex items-center gap-3 pl-6 w-full">
             <Star size={14} className={cn("transition-colors", isWatchlistExpanded ? "text-white" : "text-white/60")} />
             <span className="font-heading text-xs font-bold text-white uppercase tracking-widest flex-1">Watchlist</span>
+            
+            <Button 
+                size="sm" 
+                variant="secondary" 
+                className="h-8 rounded-none bg-[#9be34b] text-slate-900 hover:bg-[#8dd545] font-heading font-black uppercase text-[10px] tracking-widest shadow-[2px_2px_0_0_#0f172a]"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    setStep('portfolio');
+                }}
+            >
+                Portfolio
+            </Button>
+            
             <div className="bg-white text-black font-marker text-[10px] px-2 py-0.5 rotate-[-5deg] shadow-sm">
               {watchlist.length}
             </div>
@@ -131,7 +144,17 @@ export const WatchlistHeader = ({
                           </button>
                         </div>
                         <div className="flex justify-between items-end">
-                          <span className="font-heading text-lg font-bold">${info?.regularMarketPrice?.toFixed(2) || "---"}</span>
+                          <div className="flex flex-col">
+                            <span className="font-heading text-lg font-bold">${info?.regularMarketPrice?.toFixed(2) || info?.currentPrice?.toFixed(2) || "---"}</span>
+                            {info?.regularMarketChangePercent !== undefined && (
+                              <span className={cn(
+                                "font-heading text-[8px] font-black",
+                                info.regularMarketChangePercent >= 0 ? "text-emerald-500" : "text-rose-500"
+                              )}>
+                                {info.regularMarketChangePercent >= 0 ? "+" : ""}{info.regularMarketChangePercent.toFixed(2)}%
+                              </span>
+                            )}
+                          </div>
                           <div className="sticker bg-trapper-pink text-white text-[8px] px-2 py-0.5">ACTIVE</div>
                         </div>
                       </div>

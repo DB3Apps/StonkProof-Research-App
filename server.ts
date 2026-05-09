@@ -1,35 +1,52 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 import yahooFinance from 'yahoo-finance2';
-import { checkBotId } from 'botid/server';
 
-// In version 3 ESM, the default export is the YahooFinance class itself.
-// We must instantiate it to use it.
-const yahoo = new (yahooFinance as any)();
+const _filename = typeof __filename !== 'undefined' ? __filename : fileURLToPath(import.meta.url);
+const _dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(_filename);
 
-// Simple in-memory cache to mitigate rate limits
+const yahoo = new (yahooFinance as any)({
+  logger: {
+    info: (...args: any[]) => {},
+    warn: (...args: any[]) => {},
+    error: (...args: any[]) => {},
+    debug: (...args: any[]) => {},
+    dir: (...args: any[]) => {}
+  }
+});
+if (yahoo && typeof (yahoo as any).setGlobalConfig === 'function') {
+  (yahoo as any).setGlobalConfig({
+    validation: { 
+      logErrors: false, 
+      logResults: false,
+      halt: false
+    },
+    suppressNotices: ['yahooSurvey']
+  });
+}
+
+// Simple in-memory cache
 const cache = {
   quote: new Map<string, { data: any, timestamp: number }>(),
   history: new Map<string, { data: any, timestamp: number }>()
 };
-const CACHE_TTL = 10 * 60 * 1000; // Increase to 10 minutes for quotes/summaries
+const CACHE_TTL = 1 * 60 * 1000;
 
-// Helper to fetch data with a fallback for crypto tickers (e.g., SOL -> SOL-USD)
 async function fetchWithCryptoFallback(ticker: string, fetchFn: (symbol: string) => Promise<any>) {
   try {
     const result = await fetchFn(ticker);
     if (result) return result;
     throw new Error('No result');
   } catch (primaryError: any) {
-    // If primary failed and ticker doesn't already have a suffix, try -USD
     if (!ticker.includes('-') && !ticker.includes('=')) {
       try {
         const fallbackSymbol = `${ticker}-USD`;
         const result = await fetchFn(fallbackSymbol);
         if (result) return result;
       } catch (secondaryError) {
-        // Both failed, throw the primary error
         throw primaryError;
       }
     }
@@ -41,193 +58,142 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Globally disable validation to improve performance and stability
-  // and ensure we are using a configured instance
-  try {
-    if (yahoo && typeof yahoo.setGlobalConfig === 'function') {
-      yahoo.setGlobalConfig({
-        validation: { logErrors: false, logResults: false },
-        suppressNotices: ['yahooSurvey']
-      });
-    }
-  } catch (e) {
-    console.error("Failed to set global config for yahoo-finance2", e);
-  }
-
-  // Middleware to parse JSON
   app.use(express.json());
 
-  // Bot Protection Middleware
-  const botProtectionMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    // Only run in production (or if specifically testing)
-    if (process.env.NODE_ENV === 'development') return next();
-
-    try {
-      const verification = await checkBotId({
-        advancedOptions: {
-          headers: req.headers
-        }
-      });
-
-      if (verification.isBot && !verification.isVerifiedBot) {
-        console.warn(`[BotID] Blocked suspected bot request to ${req.originalUrl}`);
-        return res.status(403).json({ error: 'Access denied: Automated traffic detected' });
-      }
-      next();
-    } catch (error) {
-      console.error('BotID check error:', error);
-      next();
-    }
-  };
-
-  // Apply bot protection to all API routes
-  app.use('/api', botProtectionMiddleware);
-
-  // API diagnostic endpoint
-  app.get('/api/diagnostic', async (req, res) => {
-    try {
-      const start = Date.now();
-      const testQuote = await (yahoo as any).quote('AAPL');
-      res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        services: {
-          yahooFinance: {
-            status: 'ok',
-            latency: Date.now() - start,
-            testData: testQuote?.symbol
-          },
-          env: {
-            geminiKeySet: !!process.env.GEMINI_API_KEY,
-            nodeEnv: process.env.NODE_ENV
-          }
-        }
-      });
-    } catch (error: any) {
-      res.status(500).json({
-        status: 'error',
-        error: error.message,
-        services: {
-          yahooFinance: {
-            status: 'error',
-            message: error.message
-          }
-        }
-      });
-    }
+  // API Routes
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // API endpoint for stock info
   app.get('/api/stock/:ticker', async (req, res) => {
     try {
       const { ticker } = req.params;
       const normalizedTicker = ticker.toUpperCase().replace(/\./g, '-');
-
-      // Check cache
+      
       const cached = cache.quote.get(normalizedTicker);
       if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
         return res.json(cached.data);
       }
 
-      const getCombined = async (symbol: string) => {
-        const quote = await (yahoo as any).quote(symbol, {}, { validateResult: false });
-        if (!quote) return null;
-        
-        const summary = await (yahoo as any).quoteSummary(symbol, { modules: ["assetProfile"] }, { validateResult: false }).catch(() => null);
+      // Try quoteSummary first for rich metadata (summary, profile)
+      let data: any = {};
+      const mapSummaryData = (summary: any) => {
         return {
-          ...quote,
-          longBusinessSummary: summary?.assetProfile?.longBusinessSummary
+          symbol: normalizedTicker,
+          shortName: summary.price?.shortName || summary.price?.longName,
+          longName: summary.price?.longName,
+          regularMarketPrice: summary.price?.regularMarketPrice,
+          currentPrice: summary.price?.regularMarketPrice,
+          regularMarketChange: summary.price?.regularMarketChange,
+          regularMarketChangePercent: summary.price?.regularMarketChangePercent ? summary.price.regularMarketChangePercent * 100 : undefined,
+          marketCap: summary.price?.marketCap,
+          currency: summary.price?.currency,
+          longBusinessSummary: summary.assetProfile?.longBusinessSummary || summary.summaryProfile?.longBusinessSummary,
+          sector: summary.assetProfile?.sector,
+          industry: summary.assetProfile?.industry,
+          quoteType: summary.quoteType?.quoteType
         };
       };
 
-      const combinedData = await fetchWithCryptoFallback(normalizedTicker, getCombined);
+      try {
+        const summary = await (yahoo as any).quoteSummary(normalizedTicker, { 
+          modules: ['summaryProfile', 'assetProfile', 'price', 'quoteType'] 
+        });
+        
+        if (summary) {
+          data = mapSummaryData(summary);
+        }
+      } catch (e: any) {
+        if (e.name === 'FailedYahooValidationError' && e.result) {
+          data = mapSummaryData(e.result);
+        }
+      }
 
-      // Update cache
-      cache.quote.set(normalizedTicker, { data: combinedData, timestamp: Date.now() });
-      res.json(combinedData);
+      // Fallback or augment with standard quote
+      if (!data.regularMarketPrice || !data.shortName) {
+        const quote = await fetchWithCryptoFallback(normalizedTicker, (s) => (yahoo as any).quote(s));
+        data = { ...quote, ...data };
+      }
+
+      cache.quote.set(normalizedTicker, { data, timestamp: Date.now() });
+      res.json(data);
     } catch (error: any) {
-      // Log as warn instead of error to avoid excessive noise for expected 404s
-      console.warn('Error fetching stock info for %s: %s', req.params.ticker, error.message);
-      
-      // If Yahoo specifically says ticker not found
-      if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
-        console.info('Ticker not found or delisted: %s', req.params.ticker);
-        return res.status(404).json({ error: 'Ticker not found' });
+      if (error.message === 'No result') {
+        res.status(404).json({ error: 'Ticker not found' });
+      } else {
+        console.error(`Error fetching stock ${req.params.ticker}:`, error);
+        res.status(502).json({ 
+          error: 'Failed to fetch data from financial provider',
+          message: error.message 
+        });
       }
-      
-      // Pass through 429 if it happened
-      if (error.status === 429) {
-        return res.status(429).json({ error: 'Rate limit exceeded. Please wait a moment.' });
-      }
-
-      res.status(500).json({ error: 'Failed to fetch stock info' });
     }
   });
 
-  // API endpoint for stock history
   app.get('/api/history/:ticker', async (req, res) => {
     try {
       const { ticker } = req.params;
-      const days = parseInt(req.query.days as string, 10) || 365;
+      const days = parseInt(req.query.days as string, 10) || 30;
       const normalizedTicker = ticker.toUpperCase().replace(/\./g, '-');
+      
       const cacheKey = `${normalizedTicker}_${days}`;
-
-      // Check cache
       const cached = cache.history.get(cacheKey);
       if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
         return res.json(cached.data);
       }
 
-      const getHistory = async (symbol: string) => {
-        const history = await (yahoo as any).chart(symbol, {
+      let history: any = { quotes: [] };
+      try {
+        history = await fetchWithCryptoFallback(normalizedTicker, (s) => (yahoo as any).chart(s, {
           period1: new Date(new Date().setDate(new Date().getDate() - days)),
           interval: '1d'
-        }, { validateResult: false });
-        
-        if (!history || !(history as any).quotes) return null;
-        return (history as any).quotes;
-      };
-
-      const data = await fetchWithCryptoFallback(normalizedTicker, getHistory);
-
-      // Update cache
+        }));
+      } catch (e: any) {
+        if (e.message !== 'No result') {
+          console.error(`Chart fetch failed for ${normalizedTicker}: ${e.message}`);
+        }
+      }
+      
+      const data = (history && history.quotes) ? history.quotes : [];
       cache.history.set(cacheKey, { data, timestamp: Date.now() });
       res.json(data);
     } catch (error: any) {
-      // Log as warn instead of error to avoid excessive noise for expected 404s
-      console.warn('Error fetching history for %s: %s', req.params.ticker, error.message);
-      
-      if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
-        return res.status(404).json({ error: 'Ticker history not found' });
+      if (error.message === 'No result') {
+        res.status(404).json({ error: 'Ticker not found' });
+      } else {
+        console.error(`Error fetching history for ${req.params.ticker}:`, error);
+        res.status(502).json({ 
+          error: 'Failed to fetch history from financial provider',
+          message: error.message 
+        });
       }
-
-      if (error.status === 429) {
-        return res.status(429).json({ error: 'Rate limit exceeded. Please wait a moment.' });
-      }
-
-      res.status(500).json({ error: 'Failed to fetch stock history' });
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
+  const isDev = process.env.NODE_ENV !== 'production';
+  if (isDev) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);
+    app.get('*', async (req, res, next) => {
+      try {
+        const url = req.originalUrl;
+        let template = fs.readFileSync(path.resolve(_dirname, 'index.html'), 'utf-8');
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (e) {
+        vite.ssrFixStacktrace(e as Error);
+        next(e);
+      }
+    });
   } else {
-    // Production: serve static files
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = _dirname.endsWith('build') ? _dirname : path.resolve(_dirname, 'build');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      const indexPath = path.join(distPath, 'index.html');
-      res.sendFile(indexPath, (err) => {
-        if (err) {
-          console.error("Error sending index.html:", err);
-          res.status(500).send("Server Error: Missing index.html in dist/");
-        }
-      });
+      res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
 
@@ -236,4 +202,4 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch(console.error);

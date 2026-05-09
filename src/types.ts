@@ -27,4 +27,5 @@ export interface HistoryData {
   volume: number;
 }
 
-export type AppStep = 'instructions' | 'prompt' | 'results' | 'download';
+export type AppStep = 'instructions' | 'prompt' | 'results' | 'download' | 'portfolio' | 'research-lists' | 'research-detail';
+

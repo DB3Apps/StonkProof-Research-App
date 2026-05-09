@@ -105,6 +105,29 @@ service cloud.firestore {
         );
         allow delete: if isOwner(userId);
       }
+
+      // ===============================================================
+      // researchList Rules (/users/{userId}/researchLists/{listId})
+      // ===============================================================
+      
+      function isValidResearchList(data) {
+        return data.keys().hasAll(['userId', 'title', 'tickers']) &&
+               data.userId == request.auth.uid &&
+               data.title is string && data.title.size() <= 128 &&
+               (data.get('description', '') is string) && (data.get('description', '').size() <= 500) &&
+               data.tickers is list && data.tickers.size() <= 10;
+      }
+
+      match /researchLists/{listId} {
+        allow get: if isOwner(userId) || isAdmin();
+        allow list: if isOwner(userId) || isAdmin();
+        
+        allow create: if isOwner(userId) && isValidResearchList(request.resource.data);
+        allow update: if isOwner(userId) && isValidResearchList(request.resource.data) && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'tickers', 'updatedAt'])
+        );
+        allow delete: if isOwner(userId);
+      }
     }
   }
 }

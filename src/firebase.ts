@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, query, where, Timestamp } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, query, where, Timestamp, addDoc, deleteDoc, getDocs, updateDoc } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase
@@ -92,4 +92,4 @@ export const signInWithGoogle = async () => {
 export const logout = () => signOut(auth);
 
 // Export firestore methods so they are guaranteed to use the same module instance
-export { doc, onSnapshot, setDoc, getDoc, collection, query, where, Timestamp, onAuthStateChanged };
+export { doc, onSnapshot, setDoc, getDoc, collection, query, where, Timestamp, onAuthStateChanged, addDoc, deleteDoc, getDocs, updateDoc };

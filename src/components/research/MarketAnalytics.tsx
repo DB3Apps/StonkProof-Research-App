@@ -86,11 +86,23 @@ export const MarketAnalytics = React.memo(({ ticker, stock, history, error, isLo
         trendMap.set(p.date, m * i + b);
     });
 
-    return history.map(p => ({
-        ...p,
-        trend: trendMap.has(p.date) ? trendMap.get(p.date) : null
-    }));
+    return history.map((p, i) => {
+        // Simple Moving Average (20-day)
+        let sma20 = null;
+        if (i >= 19) {
+          const slice = history.slice(i - 19, i + 1);
+          sma20 = slice.reduce((sum, d) => sum + d.close, 0) / 20;
+        }
+
+        return {
+          ...p,
+          sma20,
+          trend: trendMap.has(p.date) ? trendMap.get(p.date) : null
+        };
+    });
   }, [history, zoomState.left, zoomState.right]);
+
+  const [showIndicators, setShowIndicators] = useState({ sma: true, trend: true });
 
   const trendGradientStops = useMemo(() => {
     if (!history || history.length < 2) return null;
@@ -130,32 +142,53 @@ export const MarketAnalytics = React.memo(({ ticker, stock, history, error, isLo
   }
 
   return (
-    <div className="paper-card bg-white p-8 space-y-8 relative overflow-hidden">
+    <div className="paper-card bg-white p-4 sm:p-8 space-y-8 relative overflow-hidden">
       <DoodleField density={4} opacity={0.05} seed={ticker.length} />
-      <div className="flex items-center justify-between relative z-10">
-        <div className="flex items-center gap-4">
-          <div className="h-4 w-4 doodle-border bg-trapper-lime rotate-45" />
-          <h3 className="font-heading text-sm font-bold uppercase tracking-widest">Market Analytics / 1Y</h3>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between relative z-10 gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap w-full sm:w-auto">
+          <div className="h-4 w-4 doodle-border bg-trapper-lime rotate-45 shrink-0" />
+          <h3 className="font-heading text-xs sm:text-sm font-bold uppercase tracking-widest">Market Analytics / 1Y</h3>
+          <div className="flex items-center gap-2 ml-auto sm:ml-0">
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={showIndicators.sma} 
+                onChange={() => setShowIndicators(p => ({ ...p, sma: !p.sma }))}
+                className="w-3 h-3 accent-slate-900"
+              />
+              <span className="font-heading text-[8px] font-bold uppercase text-slate-400">SMA20</span>
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={showIndicators.trend} 
+                onChange={() => setShowIndicators(p => ({ ...p, trend: !p.trend }))}
+                className="w-3 h-3 accent-slate-900"
+              />
+              <span className="font-heading text-[8px] font-bold uppercase text-slate-400">TREND</span>
+            </label>
+          </div>
         </div>
-        <div className="flex items-center gap-6">
+        
+        <div className="flex items-center gap-3 sm:gap-6 w-full sm:w-auto justify-end">
           {zoomState.left !== 'dataMin' && (
             <Button 
               variant="outline" 
               size="sm" 
               onClick={resetZoom}
-              className="h-8 border-2 border-slate-900 font-heading text-[10px] font-bold uppercase bg-white"
+              className="h-8 border-2 border-slate-900 font-heading text-[10px] font-bold uppercase bg-white w-full sm:w-auto mt-2 sm:mt-0"
             >
               Reset Zoom
             </Button>
           )}
-          <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2">
             <div className="h-[2px] w-8 bg-slate-900" />
             <span className="font-sans text-xs font-bold text-slate-500 uppercase tracking-wider">Close Price</span>
           </div>
         </div>
       </div>
       
-      <div className="h-[480px] w-full relative select-none z-10">
+      <div className="h-[400px] sm:h-[500px] w-full relative select-none z-10 px-0 sm:px-4 pb-2 sm:pb-4">
         {isLoading ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/50 backdrop-blur-[2px] z-20">
               <div className="flex flex-col items-center gap-4 w-full px-4">
@@ -170,6 +203,7 @@ export const MarketAnalytics = React.memo(({ ticker, stock, history, error, isLo
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart 
               data={chartData}
+              margin={{ top: 20, right: 0, bottom: 0, left: 0 }}
               onMouseDown={e => e && setZoomState(prev => ({ ...prev, refAreaLeft: e.activeLabel || '' }))}
               onMouseMove={e => e && zoomState.refAreaLeft && setZoomState(prev => ({ ...prev, refAreaRight: e.activeLabel || '' }))}
               onMouseUp={handleZoom}
@@ -191,17 +225,20 @@ export const MarketAnalytics = React.memo(({ ticker, stock, history, error, isLo
                 yAxisId="left"
                 orientation="right"
                 domain={[
-                  (dataMin: number) => zoomState.bottom === 'auto' ? Math.floor(dataMin * 0.95) : zoomState.bottom,
-                  (dataMax: number) => zoomState.top === 'auto' ? Math.ceil(dataMax * 1.05) : zoomState.top
+                  (dataMin: number) => zoomState.bottom === 'auto' ? Math.floor(dataMin * 0.99) : zoomState.bottom,
+                  (dataMax: number) => zoomState.top === 'auto' ? Math.ceil(dataMax * 1.01) : zoomState.top
                 ]}
                 tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'var(--font-mono)' }}
                 axisLine={false}
                 tickLine={false}
+                width={30}
+                mirror={true}
               />
               <YAxis 
                 yAxisId="right"
                 orientation="left"
                 hide={true}
+                width={0}
               />
               <Tooltip 
                 content={({ active, payload }) => {
@@ -248,16 +285,29 @@ export const MarketAnalytics = React.memo(({ ticker, stock, history, error, isLo
                 fill="#000000" 
                 isAnimationActive={false}
               />
-              <Line
-                yAxisId="left"
-                type="monotone"
-                dataKey="trend"
-                stroke="#ff0000"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                dot={false}
-                isAnimationActive={false}
-              />
+              {showIndicators.sma && (
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="sma20"
+                  stroke="#fbbf24"
+                  strokeWidth={2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              )}
+              {showIndicators.trend && (
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="trend"
+                  stroke="#ff0000"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              )}
               <Bar
                 yAxisId="right"
                 dataKey="volume"

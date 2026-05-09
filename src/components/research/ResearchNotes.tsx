@@ -20,15 +20,16 @@ export const ResearchNotes = React.memo(({ note, setNote, saveNote, isSavingNote
             <HandDrawnDoodle type="star" size={28} className="pencil-doodle" />
             <h3 className="font-heading text-lg font-bold uppercase tracking-widest">Personal Thesis</h3>
           </div>
-          <Button 
-            size="sm" 
-            variant="outline" 
-            className="h-8 border-2 border-slate-900 font-heading text-[10px] font-bold uppercase tracking-widest bg-white"
-            onClick={saveNote}
-            disabled={isSavingNote}
-          >
-            {isSavingNote ? <Loader2 size={12} className="animate-spin" /> : "Save Note"}
-          </Button>
+          <div className="flex items-center gap-3 italic text-[10px] font-bold text-slate-400 font-heading tracking-widest">
+            {isSavingNote ? (
+              <div className="flex items-center gap-1 text-trapper-blue">
+                <Loader2 size={10} className="animate-spin" />
+                SAVING...
+              </div>
+            ) : note ? (
+              <div className="text-emerald-500">SYNCED</div>
+            ) : null}
+          </div>
         </div>
         <div className="relative group">
           <textarea 

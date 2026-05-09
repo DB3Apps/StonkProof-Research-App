@@ -28,6 +28,8 @@ import {
   CloudLightning,
   Ghost,
   Crown,
+  FileText,
+  Share2,
   Fingerprint,
   CircuitBoard,
   Mountain,
@@ -63,10 +65,10 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, getGradeColor, calculateRSI, calculateSpiciness, calculateResearchGrade } from "@/lib/utils";
-import { getTickersFromAI, getCombinedAnalysis, getCombinedAnalysisStream } from "@/lib/gemini";
+import { getTickersFromAI, getCombinedAnalysis, getCombinedAnalysisStream, getDeepDiveAnalysis } from "@/lib/gemini";
 
-import { auth, getDb, handleFirestoreError, OperationType, Timestamp, onAuthStateChanged, signInWithGoogle, logout, onSnapshot, setDoc, db } from "./firebase";
-import { doc } from "firebase/firestore";
+import { auth, getDb, handleFirestoreError, OperationType, Timestamp, onAuthStateChanged, signInWithGoogle, logout, onSnapshot, setDoc, db, doc } from "./firebase";
+// import { doc } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { WatchlistHeader } from "./components/WatchlistHeader";
 import { StockInfo, HistoryData, AppStep } from "./types";
@@ -74,18 +76,23 @@ import { HandDrawnFilter, SPRLogo, DoodleField } from "./components/Doodles";
 import { MarketAnalytics } from "./components/research/MarketAnalytics";
 import { AIInsights } from "./components/research/AIInsights";
 import { NewsFeed } from "./components/research/NewsFeed";
+import { PortfolioView } from "./components/PortfolioView";
+import { ResearchListsView } from "./components/ResearchListsView";
+import { StockResearchDetail } from "./components/StockResearchDetail";
 import { ResearchNotes } from "./components/research/ResearchNotes";
 import { DiscoveryResults } from "./components/research/DiscoveryResults";
+// import { MarketOverview } from "./components/research/MarketOverview";
+import { ComparisonGrid } from "./components/research/ComparisonGrid";
+import ReactMarkdown from 'react-markdown';
 
-import { Analytics } from "@vercel/analytics/react";
-import { initBotId } from "botid/client/core";
+// import { Analytics } from "@vercel/analytics/react";
+// import { initBotId } from "botid/client/core";
 
 // --- App Component ---
 export default function App() {
   return (
     <>
       <AppContent />
-      <Analytics />
     </>
   );
 }
@@ -107,6 +114,7 @@ function AppContent() {
 
     try {
       // Final check: ensure fetch is actually writable before letting the library attempt to patch it
+      /*
       const descriptor = Object.getOwnPropertyDescriptor(window, "fetch");
       if (descriptor && !descriptor.writable && !descriptor.set && !descriptor.configurable) {
         console.warn("BotID: window.fetch is not writable in this environment. Skipping instrumentation.");
@@ -119,6 +127,7 @@ function AppContent() {
           { path: "/api/history/*", method: "GET" },
         ],
       });
+      */
     } catch (error) {
       // Silently catch and log as info/warn to avoid triggering error boundaries or alarming the user
       // in environments where patching global APIs is restricted.
@@ -160,11 +169,45 @@ function AppContent() {
   const [loadingChart, setLoadingChart] = useState<Record<string, boolean>>({});
   const fetchingAnalysisRef = useRef<Set<string>>(new Set());
   const [manualTicker, setManualTicker] = useState("");
-  const [step, setStep] = useState<'instructions' | 'prompt' | 'results' | 'download'>('instructions');
+  const [step, setStep] = useState<AppStep>('instructions');
+  const [selectedResearchTicker, setSelectedResearchTicker] = useState<string | null>(null);
+  const [note, setNote] = useState("");
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isWatchlistExpanded, setIsWatchlistExpanded] = useState(false);
   const [showGradeModal, setShowGradeModal] = useState(false);
-  const [isSortByGrade, setIsSortByGrade] = useState(false);
+  const [dashboardData, setDashboardData] = useState<Record<string, StockInfo>>({});
+  
+  // NEW: Comparison State
+  const [comparisonList, setComparisonList] = useState<string[]>([]);
+  const [showComparison, setShowComparison] = useState(false);
+
+  // NEW: Deep Dive State
+  const [isDeepDiving, setIsDeepDiving] = useState<Record<string, boolean>>({});
+  const [deepDiveData, setDeepDiveData] = useState<Record<string, string>>({});
+
+  const handleDeepDive = async (ticker: string) => {
+    if (isDeepDiving[ticker] || deepDiveData[ticker]) return;
+    
+    setIsDeepDiving(prev => ({ ...prev, [ticker]: true }));
+    try {
+      const info = stockData[ticker];
+      const context = `${info?.longBusinessSummary || ""} ${info?.conciseSummary || ""}`;
+      const report = await getDeepDiveAnalysis(ticker, context);
+      setDeepDiveData(prev => ({ ...prev, [ticker]: report }));
+    } catch (error) {
+      console.error("Deep Dive Error:", error);
+    } finally {
+      setIsDeepDiving(prev => ({ ...prev, [ticker]: false }));
+    }
+  };
+
+  const toggleComparison = (ticker: string) => {
+    setComparisonList(prev => 
+      prev.includes(ticker) ? prev.filter(t => t !== ticker) : [...prev, ticker]
+    );
+  };
+
+  const mainIndices = ["SPY", "QQQ", "BTC-USD", "NVDA"];
 
   // Define grade order for sorting
   const gradeOrder = useMemo(() => ({
@@ -175,13 +218,12 @@ function AppContent() {
   }), []);
 
   const displayedTickers = useMemo(() => {
-    if (!isSortByGrade) return tickers;
     return [...tickers].sort((a, b) => {
       const gradeA = stockData[a]?.researchGrade || "---";
       const gradeB = stockData[b]?.researchGrade || "---";
       return (gradeOrder[gradeB as keyof typeof gradeOrder] || 0) - (gradeOrder[gradeA as keyof typeof gradeOrder] || 0);
     });
-  }, [tickers, stockData, isSortByGrade, gradeOrder]);
+  }, [tickers, stockData, gradeOrder]);
   
   const resetApp = () => {
     setQuery("");
@@ -189,7 +231,6 @@ function AppContent() {
     setAllSeenTickers([]);
     setDiscoveryPage(0);
     setSelectedTicker(null);
-    setIsSortByGrade(false);
     setStockData({});
     setHistoryData({});
     setHistoryError({});
@@ -254,6 +295,22 @@ function AppContent() {
       unsubscribe();
       clearTimeout(timer);
     };
+  }, []); // Remove isAuthReady to prevent infinite loops
+
+  // Fetch Market Indices on load
+  useEffect(() => {
+    if (!isAuthReady) return;
+    
+    const refreshIndices = () => {
+      for (const ticker of mainIndices) {
+        fetchStockInfo(ticker);
+      }
+    };
+    
+    refreshIndices();
+    const interval = setInterval(refreshIndices, 60000);
+    
+    return () => clearInterval(interval);
   }, [isAuthReady]);
 
   // Firestore Watchlist Sync
@@ -264,7 +321,7 @@ function AppContent() {
     }
 
     const path = `users/${user.uid}/data/watchlist`;
-    const dbInstance = db;
+    const dbInstance = getDb();
     if (!dbInstance) return;
     const unsubscribe = onSnapshot(doc(dbInstance, path), (snapshot) => {
       if (snapshot.exists()) {
@@ -279,7 +336,7 @@ function AppContent() {
 
   // Sync watchlist to Firestore
   const syncWatchlist = async (newList: string[]) => {
-    const dbInstance = db;
+    const dbInstance = getDb();
     if (!user || !dbInstance) return;
     const path = `users/${user.uid}/data/watchlist`;
     try {
@@ -293,8 +350,20 @@ function AppContent() {
     }
   };
 
-  const [note, setNote] = useState("");
+  const toggleWatchlist = (ticker: string) => {
+    setWatchlist(prev => {
+      const newList = prev.includes(ticker) 
+        ? prev.filter(t => t !== ticker) 
+        : [...prev, ticker];
+      syncWatchlist(newList);
+      return newList;
+    });
+  };
+
+
+
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const saveNoteRef = useRef<(() => Promise<void>) | null>(null);
 
   // Firestore Note Sync
   useEffect(() => {
@@ -304,16 +373,17 @@ function AppContent() {
     }
 
     const path = `users/${user.uid}/notes/${selectedTicker}`;
-    const dbInstance = db;
+    const dbInstance = getDb();
     if (!dbInstance) return;
     const unsubscribe = onSnapshot(doc(dbInstance, path), (snapshot) => {
       if (snapshot.exists()) {
-        setNote(snapshot.data().content || "");
+        const remoteNote = snapshot.data().content || "";
+        // Only update local state if it's different to avoid cursor jumping
+        setNote(prev => prev === remoteNote ? prev : remoteNote);
       } else {
         setNote("");
       }
     }, (error) => {
-      // Notes are optional, so we don't necessarily want to throw a hard error here
       console.warn("Note sync error:", error);
     });
 
@@ -321,7 +391,7 @@ function AppContent() {
   }, [user, selectedTicker]);
 
   const saveNote = async () => {
-    const dbInstance = db;
+    const dbInstance = getDb();
     if (!user || !selectedTicker || !dbInstance) return;
     setIsSavingNote(true);
     const path = `users/${user.uid}/notes/${selectedTicker}`;
@@ -330,26 +400,92 @@ function AppContent() {
         userId: user.uid,
         ticker: selectedTicker,
         content: note,
-        createdAt: Timestamp.now()
-      });
+        updatedAt: Timestamp.now(),
+        createdAt: Timestamp.now() // setDoc with merge or check if exists would be better for createdAt, but blueprint says required
+      }, { merge: true });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
+      console.error("Auto-save error:", error);
     } finally {
       setIsSavingNote(false);
     }
   };
 
+  // Keep ref up to date for the debounce effect
+  useEffect(() => {
+    saveNoteRef.current = saveNote;
+  }, [note, user, selectedTicker]);
+
+  // Debounced Auto-save Effect
+  useEffect(() => {
+    if (!note || !user || !selectedTicker) return;
+    
+    const timer = setTimeout(() => {
+      if (saveNoteRef.current) saveNoteRef.current();
+    }, 1500); // Save after 1.5s of inactivity
+
+    return () => clearTimeout(timer);
+  }, [note]);
+
+  const downloadReport = () => {
+    if (!selectedTicker) return;
+    const stock: Partial<StockInfo> = stockData[selectedTicker] || {};
+    const report = `# STONKPROOF RESEARCH REPORT: ${selectedTicker}
+Date: ${new Date().toLocaleDateString()}
+Asset: ${stock.longName || stock.shortName || selectedTicker}
+Research Grade: ${stock.researchGrade || "---"}
+
+## 1. Executive Summary
+${stock.conciseSummary || "Research in progress. Model is currently analyzing business fundamentals and competitive positioning."}
+
+## 2. Key News & Catalyst (30-Day Window)
+${stock.newsCatalyst || "No high-impact catalysts identified in the current window."}
+
+## 3. Technical & Quantitative Metrics
+- Market Quote: $${(stock.regularMarketPrice || stock.currentPrice || 0).toFixed(2)}
+- 24H Delta: ${stock.regularMarketChangePercent?.toFixed(2)}%
+- Market Cap: $${stock.marketCap ? (stock.marketCap / 1e9).toFixed(2) + "B" : "N/A"}
+- Sector/Industry: ${stock.sector || "N/A"} / ${stock.industry || "N/A"}
+
+## 4. Proprietary Indicators
+- Sentiment Score: ${stock.sentiment ? stock.sentiment + "/10" : "N/A"}
+- RSI (14D): ${stock.rsi ? stock.rsi.toFixed(2) : "N/A"}
+- Volatility Index: ${stock.spiciness ? stock.spiciness.toFixed(1) + "/10" : "N/A"}
+
+## 5. Analyst Notes (Personal Thesis)
+${note || "No personal research notes recorded for this asset."}
+
+---
+Generated by StonkProof Research Lab (SPR)
+Confidential AI Analysis
+`;
+
+    const blob = new Blob([report], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `SPR_REPORT_${selectedTicker}_${new Date().toISOString().split('T')[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const fetchStockInfo = async (ticker: string) => {
     if (failedTickersRef.current.has(ticker)) return null;
-    if (stockData[ticker]) {
+    if (stockDataRef.current[ticker]) {
       // If we already have stock data, but no AI analysis yet, trigger it
-      if (stockData[ticker].longBusinessSummary && !stockData[ticker].conciseSummary) {
-        fetchAnalysis(ticker, false, stockData[ticker]);
+      if (stockDataRef.current[ticker].longBusinessSummary && !stockDataRef.current[ticker].conciseSummary) {
+        fetchAnalysis(ticker, false, stockDataRef.current[ticker]);
       }
-      return stockData[ticker];
+      return stockDataRef.current[ticker];
     }
+    
+    // Add a timeout to prevent hanging forever
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
     try {
-      const res = await fetch(`/api/stock/${ticker}`);
+      const res = await fetch(`/api/stock/${ticker}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
       if (res.status === 404) {
         setStockErrors(prev => ({ ...prev, [ticker]: "Symbol not found" }));
         console.info(`Ticker ${ticker} not found`);
@@ -358,18 +494,32 @@ function AppContent() {
         return null;
       }
       if (res.status === 429) {
-        console.warn(`Rate limit hit for ${ticker}, will retry later.`);
+        setStockErrors(prev => ({ ...prev, [ticker]: "Rate limit hit" }));
+        console.warn(`Rate limit hit for ${ticker}`);
+        setFailedTickers(prev => new Set(prev).add(ticker));
+        failedTickersRef.current.add(ticker);
         return null;
       }
       if (!res.ok) throw new Error(`HTTP fetch error! status: ${res.status}`);
+
       const text = await res.text();
       if (text) {
         const data = JSON.parse(text);
+        // Ensure even assets without these have placeholder values so skeletons resolve
+        if (!data.shortName) data.shortName = ticker;
         setStockData(prev => ({ ...prev, [ticker]: { ...data } }));
+        
+        // Auto-fetch history
+        fetchHistory(ticker);
+        
         return data;
+      } else {
+        throw new Error("Empty response");
       }
-    } catch (e) {
+    } catch (e: any) {
+      clearTimeout(timeoutId);
       console.error(e);
+      setStockErrors(prev => ({ ...prev, [ticker]: e.name === 'AbortError' ? "Timeout" : "Connection Error" }));
       setFailedTickers(prev => new Set(prev).add(ticker));
       failedTickersRef.current.add(ticker);
     }
@@ -390,8 +540,14 @@ function AppContent() {
     }
 
     setHistoryError(prev => ({ ...prev, [ticker]: null }));
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
     try {
-      const res = await fetch(`/api/history/${ticker}?days=${days}`);
+      const res = await fetch(`/api/history/${ticker}?days=${days}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
       if (res.status === 404) {
         setHistoryError(prev => ({ ...prev, [ticker]: "Market data not available for this symbol" }));
         setFailedTickers(prev => new Set(prev).add(ticker));
@@ -436,8 +592,9 @@ function AppContent() {
         };
       });
     } catch (e: any) {
+      clearTimeout(timeoutId);
       console.warn(`History fetch error for ${ticker}:`, e);
-      setHistoryError(prev => ({ ...prev, [ticker]: e.message || "Failed to connect to data engine" }));
+      setHistoryError(prev => ({ ...prev, [ticker]: e.name === 'AbortError' ? "Timeout" : (e.message || "Failed to connect to data engine") }));
     } finally {
       if (isFullChart) {
         setLoadingChart(prev => ({ ...prev, [ticker]: false }));
@@ -459,22 +616,25 @@ function AppContent() {
     try {
       let results: string[] = [];
       const excluded = isLoadMore ? allSeenTickers : [];
+      const isMobile = typeof window !== 'undefined' && (window.innerWidth < 768 || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+      const limit = isMobile ? 5 : 5; // Force 5 for everyone to see if it fixes the "10 cards" issue
       try {
-        console.log("handleSearch: Calling getTickersFromAI");
-        results = await getTickersFromAI(activeQuery, excluded);
-        console.log("handleSearch: Got results", results);
+        console.log("handleSearch: Calling getTickersFromAI with limit", limit);
+        results = await getTickersFromAI(activeQuery, limit, excluded);
+        console.log("handleSearch: Got results", results.length);
       } catch (err: any) {
-        console.error("Search failure:", err);
-        const msg = err.message || "";
+        const errJson = JSON.stringify(err) || "";
+        console.error("Search failure:", errJson);
+        const msg = (err.message || "") + " " + errJson;
         let userMsg = "Research Engine encountered an issue.";
-        if (msg.includes('429') || msg.includes('quota')) {
+        if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
           userMsg = "Research limit reached. Please try again in a few minutes.";
         } else if (msg.includes('403') || msg.includes('billing') || msg.includes('funds')) {
           userMsg = "The Research Lab is currently out of fuel (API Quota/Billing). Please check your Gemini API settings or try again later.";
         } else if (msg.includes('Failed to fetch')) {
           userMsg = "Connection to Research AI lost. Check your internet.";
         }
-        alert(`${userMsg}\n\nTechnical details: ${msg}`);
+        alert(`${userMsg}\n\nTechnical details: ${msg.slice(0, 100)}...`);
         return;
       }
       
@@ -489,12 +649,12 @@ function AppContent() {
       
       // We will trust the AI's selection and let the background useEffect fetch the data.
       // This prevents the UI from hanging for 10 seconds and bypasses Yahoo Finance sequential rate limits.
-      // Slice to maximum 10 results to keep UI clean.
-      const finalResults = results.slice(0, 10);
+      // Slice to maximum limit results to keep UI clean.
+      const finalResults = results.slice(0, limit);
   
       if (isLoadMore) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        setTickers(finalResults);
+        setTickers(prev => [...prev, ...finalResults]);
         setAllSeenTickers(prev => [...prev, ...finalResults]);
         setDiscoveryPage(prev => prev + 1);
       } else {
@@ -532,9 +692,10 @@ function AppContent() {
     syncWatchlist(newList);
   };
 
-  const handleManualAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const t = manualTicker.toUpperCase().trim();
+  const handleManualAdd = async (e?: React.FormEvent | string) => {
+    if (e && typeof e !== 'string') e.preventDefault();
+    const tickerFromInput = typeof e === 'string' ? e : manualTicker;
+    const t = tickerFromInput.toUpperCase().trim();
     if (t && !watchlist.includes(t)) {
       setLoading(true);
       try {
@@ -582,12 +743,11 @@ function AppContent() {
 
   useEffect(() => {
     const fetchAllBackground = async () => {
-      // Parallel fetch basic info first for all watchlist items
-      await Promise.all(watchlist.map(async (t) => {
-        if (!stockData[t]?.regularMarketPrice) {
-          await fetchStockInfo(t);
-        }
-      }));
+      // Chunked parallel fetch basic info for watchlist
+      for (let i = 0; i < watchlist.length; i += 3) {
+        const batch = watchlist.slice(i, i + 3);
+        await Promise.all(batch.map(t => fetchStockInfo(t)));
+      }
 
       // Grouped fetch for heavy analysis (AI and History) to avoid hitting limits too hard but faster than sequential
       for (let i = 0; i < watchlist.length; i += 3) {
@@ -598,7 +758,7 @@ function AppContent() {
             await fetchHistory(t, 30);
           }
           // Sync AI Analysis
-          if (stockData[t]?.longBusinessSummary && stockData[t]?.sentiment === undefined) {
+          if (stockDataRef.current[t]?.longBusinessSummary && stockDataRef.current[t]?.sentiment === undefined) {
             await fetchAnalysis(t, true);
           }
         }));
@@ -609,12 +769,11 @@ function AppContent() {
 
   useEffect(() => {
     const fetchAllBackground = async () => {
-      // Parallel fetch basic info for discovered tickers
-      await Promise.all(tickers.map(async (t) => {
-        if (!stockData[t]?.regularMarketPrice) {
-          await fetchStockInfo(t);
-        }
-      }));
+      // Chunked parallel fetch basic info for discovered tickers to avoid strict sequence blocks
+      for (let i = 0; i < tickers.length; i += 3) {
+        const batch = tickers.slice(i, i + 3);
+        await Promise.all(batch.map(t => fetchStockInfo(t)));
+      }
 
       // Batch analysis for tickers - reduce batch size to 3
       for (let i = 0; i < tickers.length; i += 3) {
@@ -625,7 +784,7 @@ function AppContent() {
             await fetchHistory(t, 30);
           }
           // Sync AI Analysis
-          if (stockData[t]?.longBusinessSummary && stockData[t]?.sentiment === undefined) {
+          if (stockDataRef.current[t]?.longBusinessSummary && stockDataRef.current[t]?.sentiment === undefined) {
             await fetchAnalysis(t, true);
           }
         }));
@@ -642,8 +801,10 @@ function AppContent() {
     if (fetchingAnalysisRef.current.has(ticker)) return;
     
     const stock = overrideStock || stockData[ticker];
-    if (!stock || !stock.longBusinessSummary) return;
-    if (stock.sentiment !== undefined && stock.conciseSummary) return;
+    if (!stock) return;
+    
+    // If we already have the AI analysis, skip
+    if (stock.sentiment !== undefined && stock.conciseSummary && stock.newsCatalyst) return;
 
     try {
       fetchingAnalysisRef.current.add(ticker);
@@ -653,9 +814,12 @@ function AppContent() {
       let catalyst = stock.newsCatalyst;
       let sentiment = stock.sentiment;
 
+      const aiInputText = stock.longBusinessSummary || 
+                        (stock.shortName ? `${stock.shortName} (${ticker}) stock analysis` : `${ticker} market asset analysis`);
+
       if (!summary || sentiment === undefined) {
         if (!silent) {
-           await getCombinedAnalysisStream(stock.longBusinessSummary, (partial) => {
+           await getCombinedAnalysisStream(aiInputText, (partial) => {
              if (partial.summary || partial.newsCatalyst || partial.sentiment !== undefined) {
                setStockData(prev => {
                  const current = prev[ticker] || { symbol: ticker } as StockInfo;
@@ -682,7 +846,7 @@ function AppContent() {
            sentiment = finalStock?.sentiment;
         } else {
            // Do fallback silently using combined analysis to save time
-           const combined = await getCombinedAnalysis(stock.longBusinessSummary, false);
+           const combined = await getCombinedAnalysis(aiInputText, false);
            summary = combined.summary;
            catalyst = combined.newsCatalyst;
            sentiment = combined.sentiment;
@@ -697,9 +861,14 @@ function AppContent() {
           [ticker]: { ...current, conciseSummary: summary, newsCatalyst: catalyst, sentiment, researchGrade: grade }
         } as Record<string, StockInfo>;
       });
-    } catch (error) {
-      console.error("Analysis error for", ticker, ":", error);
-      if (!silent) alert("Analysis failed. Please try again.");
+    } catch (error: any) {
+      const errorStr = JSON.stringify(error) || "";
+      if (errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED")) {
+        console.warn(`Analysis quota exceeded for ${ticker}`);
+      } else {
+        console.error("Analysis error for", ticker, ":", errorStr);
+        if (!silent) alert("Analysis failed. Please try again.");
+      }
     } finally {
       fetchingAnalysisRef.current.delete(ticker);
       if (!silent) setLoadingAI(prev => ({ ...prev, [ticker]: false }));
@@ -1044,8 +1213,36 @@ if (step === 'prompt') {
         </div>
       </header>      <main className="flex-1">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16 overflow-x-hidden space-y-20">
+          {/* Navigation */}
+          <nav className="flex justify-center p-4 relative z-50">
+            <Button variant="ghost" onClick={() => setStep('research-lists')} className="font-heading font-black text-xs uppercase tracking-widest text-slate-900 border-2 border-slate-900 rounded-none shadow-[2px_2px_0_0_#0f172a] hover:bg-white hover:text-slate-900 cursor-pointer">
+              Curated Research Lists
+            </Button>
+          </nav>
+
           <AnimatePresence mode="wait">
-            {selectedTicker ? (
+            {step === 'portfolio' ? (
+              <PortfolioView 
+                watchlist={watchlist}
+                stockData={stockData}
+                historyData={historyData}
+                userJoinedAt={user?.metadata.creationTime ? new Date(user.metadata.creationTime) : null}
+                onBack={() => setStep('results')} 
+              />
+            ) : step === 'research-lists' ? (
+              <ResearchListsView 
+                onBack={() => setStep('results')}
+                onViewResearch={(ticker) => {
+                  setSelectedResearchTicker(ticker);
+                  setStep('research-detail');
+                }}
+              />
+            ) : step === 'research-detail' ? (
+              <StockResearchDetail 
+                ticker={selectedResearchTicker || ''}
+                onBack={() => setStep('research-lists')}
+              />
+            ) : selectedTicker ? (
               <motion.div
                 key={selectedTicker}
                 initial={{ opacity: 0, x: 20 }}
@@ -1073,13 +1270,33 @@ if (step === 'prompt') {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-4 sm:mt-0">
+                    <Button 
+                      variant="outline"
+                      className="h-12 sm:h-14 px-4 sm:px-5 border-2 border-slate-900 font-heading font-bold uppercase text-xs tracking-widest gap-2 sm:gap-3 bg-white hover:bg-slate-50 shadow-[3px_3px_0_0_rgba(0,0,0,1)] sm:shadow-[4px_4px_0_0_rgba(0,0,0,1)]"
+                      onClick={downloadReport}
+                      title="Export Markdown Report"
+                    >
+                      <FileText size={16} className="sm:w-[18px] sm:h-[18px]" />
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      className={cn(
+                        "h-12 sm:h-14 px-4 sm:px-8 border-2 border-slate-900 font-heading font-bold uppercase text-xs tracking-widest gap-2 sm:gap-3 transition-all shadow-[3px_3px_0_0_rgba(0,0,0,1)] sm:shadow-[4px_4px_0_0_rgba(0,0,0,1)] flex-1 sm:flex-none whitespace-nowrap",
+                        deepDiveData[selectedTicker] ? "bg-trapper-lime text-slate-900" : "bg-white hover:bg-slate-50 text-slate-900"
+                      )}
+                      onClick={() => handleDeepDive(selectedTicker)}
+                      disabled={isDeepDiving[selectedTicker]}
+                    >
+                      {isDeepDiving[selectedTicker] ? <Loader2 size={16} className="animate-spin sm:w-[18px] sm:h-[18px]" /> : <Zap size={16} className="sm:w-[18px] sm:h-[18px]" />}
+                      {deepDiveData[selectedTicker] ? "Deep Dive Active" : "Trigger Deep Dive"}
+                    </Button>
                     <Button 
                       variant={watchlist.includes(selectedTicker) ? "secondary" : "outline"}
-                      className="h-14 px-8 border-2 border-slate-900 font-heading font-bold uppercase text-xs tracking-widest gap-3 bg-white hover:bg-slate-50 shadow-[4px_4px_0_0_rgba(0,0,0,1)]"
+                      className="h-12 sm:h-14 px-4 sm:px-8 border-2 border-slate-900 font-heading font-bold uppercase text-xs tracking-widest gap-2 sm:gap-3 bg-white hover:bg-slate-50 shadow-[3px_3px_0_0_rgba(0,0,0,1)] sm:shadow-[4px_4px_0_0_rgba(0,0,0,1)] flex-1 sm:flex-none whitespace-nowrap"
                       onClick={() => watchlist.includes(selectedTicker) ? removeFromWatchlist(selectedTicker) : addToWatchlist(selectedTicker)}
                     >
-                      {watchlist.includes(selectedTicker) ? <StarOff size={18} /> : <Star size={18} />}
+                      {watchlist.includes(selectedTicker) ? <StarOff size={16} className="sm:w-[18px] sm:h-[18px]" /> : <Star size={16} className="sm:w-[18px] sm:h-[18px]" />}
                       {watchlist.includes(selectedTicker) ? "Drop Asset" : "Watch Asset"}
                     </Button>
                   </div>
@@ -1131,7 +1348,7 @@ if (step === 'prompt') {
                   ticker={selectedTicker} 
                   stock={currentStock} 
                   history={currentHistory} 
-                  error={historyError[selectedTicker]}
+                  error={stockErrors[selectedTicker] || historyError[selectedTicker]}
                   isLoading={loadingChart[selectedTicker]}
                 />
                 
@@ -1141,6 +1358,69 @@ if (step === 'prompt') {
                     stock={currentStock} 
                     isLoadingAI={loadingAI[selectedTicker]} 
                   />
+
+                  <AnimatePresence>
+                    {deepDiveData[selectedTicker] && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="paper-card p-4 sm:p-8 bg-slate-900 text-white border-4 border-slate-900 shadow-[6px_6px_0_0_#9be34b] sm:shadow-[12px_12px_0_0_#9be34b] relative overflow-hidden break-words w-full"
+                      >
+                         <div className="absolute top-0 right-0 p-2 sm:p-4 opacity-75 sm:opacity-100">
+                           <div className="bg-trapper-lime text-slate-900 text-[8px] sm:text-[10px] font-black px-2 sm:px-3 py-1 rounded shadow-sm rotate-3 tracking-widest">
+                             DEEP DIVE REPORT
+                           </div>
+                         </div>
+                         <div className="max-w-none w-full overflow-x-hidden mt-6 sm:mt-0 text-sm sm:text-base break-words">
+                           <ReactMarkdown
+                             components={{
+                               h1: ({node, ...props}) => <h1 className="text-xl sm:text-2xl font-heading font-black border-b border-slate-700 pb-2 mb-3 sm:mb-4 mt-6 sm:mt-8 uppercase tracking-tighter text-trapper-lime break-words" {...props} />,
+                               h2: ({node, ...props}) => <h2 className="text-lg sm:text-xl font-heading font-bold border-b border-slate-800 pb-1 mb-2 sm:mb-3 mt-4 sm:mt-6 uppercase text-emerald-400 break-words" {...props} />,
+                               p: ({node, ...props}) => <p className="mb-3 sm:mb-4 text-slate-300 leading-relaxed font-sans text-sm sm:text-base break-words" {...props} />,
+                               ul: ({node, ...props}) => <ul className="list-disc pl-4 sm:pl-5 mb-3 sm:mb-4 space-y-1 sm:space-y-2 text-slate-300 text-sm sm:text-base break-words" {...props} />,
+                               li: ({node, ...props}) => <li className="pl-0 sm:pl-1 break-words" {...props} />,
+                               strong: ({node, ...props}) => <strong className="text-white font-bold break-words" {...props} />,
+                               hr: ({node, ...props}) => <hr className="border-slate-800 my-6 sm:my-8" {...props} />,
+                               a: ({node, ...props}) => <a className="text-emerald-400 break-all" {...props} />,
+                               h3: ({node, ...props}) => <h3 className="text-base sm:text-lg font-heading font-bold mb-2 mt-4 text-white break-words" {...props} />,
+                               ol: ({node, ...props}) => <ol className="list-decimal pl-4 sm:pl-5 mb-3 sm:mb-4 space-y-1 sm:space-y-2 text-slate-300 text-sm sm:text-base break-words" {...props} />,
+                               blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-trapper-lime pl-4 italic text-slate-400 my-4" {...props} />,
+                               pre: ({node, ...props}) => <div className="overflow-x-auto my-4 bg-slate-950 p-4 rounded border border-slate-800"><pre className="text-xs sm:text-sm text-slate-300" {...props} /></div>,
+                               code: ({node, className, ...props}) => {
+                                 const isInline = !className;
+                                 return <code className={className || "bg-slate-800 px-1 py-0.5 rounded text-emerald-300 text-xs sm:text-sm font-mono break-all"} {...props} />;
+                               },
+                               table: ({node, ...props}) => <div className="overflow-x-auto my-4 pb-2"><table className="w-full text-left border-collapse text-sm" {...props} /></div>,
+                               th: ({node, ...props}) => <th className="border-b border-slate-700 bg-slate-800/50 p-2 sm:p-3 font-heading text-trapper-lime font-bold whitespace-nowrap" {...props} />,
+                               td: ({node, ...props}) => <td className="border-b border-slate-800 p-2 sm:p-3 text-slate-300 sm:whitespace-nowrap" {...props} />,
+                             }}
+                           >
+                             {deepDiveData[selectedTicker]}
+                           </ReactMarkdown>
+                         </div>
+                         <div className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-800/50 -mx-4 sm:-mx-8 -mb-4 sm:-mb-8 p-4 sm:p-8 gap-4 sm:gap-0">
+                            <div className="text-[10px] font-mono text-slate-500 uppercase">
+                              Synthesized by SPR Intelligence Core v2.0
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-trapper-lime hover:text-white transition-colors uppercase font-heading text-[10px] tracking-widest"
+                              onClick={() => {
+                                const blob = new Blob([deepDiveData[selectedTicker]], { type: 'text/markdown' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `SPR_DEEPDIVE_${selectedTicker}.md`;
+                                a.click();
+                              }}
+                            >
+                              <Download size={12} className="mr-2" /> Export Report
+                            </Button>
+                         </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   
                   <NewsFeed 
                     stock={currentStock} 
@@ -1166,18 +1446,37 @@ if (step === 'prompt') {
                 </div>
               </motion.div>
             ) : (
-                <DiscoveryResults 
-                  tickers={tickers}
-                  displayedTickers={displayedTickers}
-                  stockData={stockData}
-                  selectedTicker={selectedTicker}
-                  setSelectedTicker={setSelectedTicker}
-                  isSortByGrade={isSortByGrade}
-                  setIsSortByGrade={setIsSortByGrade}
-                  loading={loading}
-                  handleSearch={handleSearch}
-                  discoveryPage={discoveryPage}
-                />
+                <div className="space-y-12">
+                  <DiscoveryResults 
+                    tickers={tickers}
+                    displayedTickers={displayedTickers}
+                    stockData={stockData}
+                    failedTickers={failedTickers}
+                    stockErrors={stockErrors}
+                    selectedTicker={selectedTicker}
+                    setSelectedTicker={setSelectedTicker}
+                    loading={loading}
+                    handleSearch={handleSearch}
+                    discoveryPage={discoveryPage}
+                    comparisonList={comparisonList}
+                    onToggleComparison={toggleComparison}
+                    onOpenComparison={() => setShowComparison(true)}
+                  />
+                </div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showComparison && (
+               <ComparisonGrid 
+                 comparisonList={comparisonList}
+                 stockData={stockData}
+                 onRemove={toggleComparison}
+                 onClose={() => setShowComparison(false)}
+                 onSelect={(t) => {
+                   setSelectedTicker(t);
+                 }}
+               />
             )}
           </AnimatePresence>
 

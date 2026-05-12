@@ -121,7 +121,7 @@ async function startServer() {
       if (error.message === 'No result') {
         res.status(404).json({ error: 'Ticker not found' });
       } else {
-        console.error(`Error fetching stock ${req.params.ticker}:`, error);
+        console.error('Error fetching stock %s: %s', req.params.ticker, error.message);
         res.status(502).json({ 
           error: 'Failed to fetch data from financial provider',
           message: error.message 
@@ -150,7 +150,7 @@ async function startServer() {
         }));
       } catch (e: any) {
         if (e.message !== 'No result') {
-          console.error(`Chart fetch failed for ${normalizedTicker}: ${e.message}`);
+          console.error('Chart fetch failed for %s: %s', normalizedTicker, e.message);
         }
       }
       
@@ -161,7 +161,7 @@ async function startServer() {
       if (error.message === 'No result') {
         res.status(404).json({ error: 'Ticker not found' });
       } else {
-        console.error(`Error fetching history for ${req.params.ticker}:`, error);
+        console.warn('Error fetching history for %s: %s', req.params.ticker, error.message);
         res.status(502).json({ 
           error: 'Failed to fetch history from financial provider',
           message: error.message 

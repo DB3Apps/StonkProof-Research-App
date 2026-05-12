@@ -150,7 +150,7 @@ async function startServer() {
         }));
       } catch (e: any) {
         if (e.message !== 'No result') {
-          console.error(`Chart fetch failed for ${normalizedTicker}: ${e.message}`);
+          console.error('Chart fetch failed for %s: %s', normalizedTicker, e.message);
         }
       }
       

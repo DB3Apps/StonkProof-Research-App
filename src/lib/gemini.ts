@@ -31,7 +31,7 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 2000): Pr
                       statusText.includes('deadline');
     
     if (retries > 0 && isTransient) {
-      console.warn(`AI request failed (${status}). Retrying in ${delay}ms... (${retries} left)`);
+      console.warn('AI request failed (%s). Retrying in %sms... (%s left)', status, delay, retries);
       await new Promise(resolve => setTimeout(resolve, delay));
       return withRetry(fn, retries - 1, delay * 1.5);
     }

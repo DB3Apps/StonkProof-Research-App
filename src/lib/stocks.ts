@@ -18,7 +18,7 @@ export async function fetchStockQuote(ticker: string): Promise<StockQuote | null
     if (!response.ok) throw new Error("Failed to fetch stock");
     return await response.json();
   } catch (error) {
-    console.error(`Error fetching ${ticker}:`, error);
+    console.error('Error fetching %s:', ticker, error);
     return null;
   }
 }
@@ -33,7 +33,7 @@ export async function fetchStockHistory(ticker: string): Promise<HistoricalData[
       close: item.close,
     }));
   } catch (error) {
-    console.error(`Error fetching history for ${ticker}:`, error);
+    console.error('Error fetching history for %s:', ticker, error);
     return [];
   }
 }

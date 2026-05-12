@@ -488,14 +488,14 @@ Confidential AI Analysis
       
       if (res.status === 404) {
         setStockErrors(prev => ({ ...prev, [ticker]: "Symbol not found" }));
-        console.info(`Ticker ${ticker} not found`);
+        console.info('Ticker %s not found', ticker);
         setFailedTickers(prev => new Set(prev).add(ticker));
         failedTickersRef.current.add(ticker);
         return null;
       }
       if (res.status === 429) {
         setStockErrors(prev => ({ ...prev, [ticker]: "Rate limit hit" }));
-        console.warn(`Rate limit hit for ${ticker}`);
+        console.warn('Rate limit hit for %s', ticker);
         setFailedTickers(prev => new Set(prev).add(ticker));
         failedTickersRef.current.add(ticker);
         return null;
@@ -593,7 +593,7 @@ Confidential AI Analysis
       });
     } catch (e: any) {
       clearTimeout(timeoutId);
-      console.warn(`History fetch error for ${ticker}:`, e);
+      console.warn('History fetch error for %s:', ticker, e);
       setHistoryError(prev => ({ ...prev, [ticker]: e.name === 'AbortError' ? "Timeout" : (e.message || "Failed to connect to data engine") }));
     } finally {
       if (isFullChart) {
@@ -864,7 +864,7 @@ Confidential AI Analysis
     } catch (error: any) {
       const errorStr = JSON.stringify(error) || "";
       if (errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED")) {
-        console.warn(`Analysis quota exceeded for ${ticker}`);
+        console.warn('Analysis quota exceeded for %s', ticker);
       } else {
         console.error("Analysis error for", ticker, ":", errorStr);
         if (!silent) alert("Analysis failed. Please try again.");

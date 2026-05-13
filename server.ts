@@ -118,10 +118,13 @@ async function startServer() {
       cache.quote.set(normalizedTicker, { data, timestamp: Date.now() });
       res.json(data);
     } catch (error: any) {
-      if (error.message === 'No result') {
-        res.status(404).json({ error: 'Ticker not found' });
+      // Log as warn instead of error to avoid excessive noise for expected 404s
+      console.warn('Error fetching stock info for %s: %s', req.params.ticker, error.message);
+
+      // If Yahoo specifically says ticker not found
+      if (error.message?.includes('Not Found') || error.message?.includes('No data found') || error.message?.includes('No result')) {
+        return res.status(404).json({ error: 'Ticker not found' });
       } else {
-        console.error('Error fetching stock %s: %s', req.params.ticker, error.message);
         res.status(502).json({ 
           error: 'Failed to fetch data from financial provider',
           message: error.message 

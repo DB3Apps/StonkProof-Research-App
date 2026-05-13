@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import yahooFinance from 'yahoo-finance2';
+import rateLimit from 'express-rate-limit';
 
 const _filename = typeof __filename !== 'undefined' ? __filename : fileURLToPath(import.meta.url);
 const _dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(_filename);
@@ -59,6 +60,11 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+  });
+  app.use(limiter);
 
   // API Routes
   app.get('/api/health', (req, res) => {

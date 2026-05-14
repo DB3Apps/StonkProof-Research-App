@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">StonkProof Research</string>
+    <string name="title_activity_main">StonkProof Research</string>
+    <string name="package_name">com.stonkproof.research</string>
+    <string name="custom_url_scheme">com.stonkproof.research</string>
+</resources>

@@ -24,7 +24,7 @@ jobs:
         - language: 'javascript-typescript'
           build-mode: 'none'
         - language: 'java-kotlin'
-          build-mode: 'manual'
+          build-mode: 'autobuild'
 
     steps:
     - name: Checkout repository
@@ -36,6 +36,7 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: '17'
+        cache: 'gradle'
 
     - name: Setup Node.js
       if: matrix.language == 'java-kotlin' || matrix.language == 'javascript-typescript'
@@ -44,29 +45,32 @@ jobs:
         node-version: '20'
         cache: 'npm'
 
-    - name: Install dependencies and build web app
-      if: matrix.language == 'java-kotlin' || matrix.language == 'javascript-typescript'
+    - name: Install dependencies and sync Capacitor
       run: |
         npm install
         npm run build
+        if [ "${{ matrix.language }}" == "java-kotlin" ]; then
+          chmod +x android/gradlew
+          npx cap sync android
+        fi
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
+        queries: security-extended,security-and-quality
         # Exclude node_modules from analysis
         config: |
           paths-ignore:
             - 'node_modules/**'
 
-    - name: Build Android App (for CodeQL)
-      if: matrix.language == 'java-kotlin'
-      run: |
-        cd android
-        ./gradlew assembleDebug
+    - name: Autobuild
+      if: matrix.language == 'java-kotlin' && matrix.build-mode == 'autobuild'
+      uses: github/codeql-action/autobuild@v3
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
       with:
         category: "/language:${{matrix.language}}"
+        upload: true

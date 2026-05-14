@@ -20,20 +20,51 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'javascript-typescript' ]
+        include:
+        - language: 'javascript-typescript'
+          build-mode: 'none'
+        - language: 'java-kotlin'
+          build-mode: 'manual'
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Setup Java
+      if: matrix.language == 'java-kotlin'
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Setup Node.js
+      if: matrix.language == 'java-kotlin' || matrix.language == 'javascript-typescript'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies and build web app
+      if: matrix.language == 'java-kotlin' || matrix.language == 'javascript-typescript'
+      run: |
+        npm install
+        npm run build
+
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
         # Exclude node_modules from analysis
         config: |
           paths-ignore:
             - 'node_modules/**'
+
+    - name: Build Android App (for CodeQL)
+      if: matrix.language == 'java-kotlin'
+      run: |
+        cd android
+        ./gradlew assembleDebug
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3

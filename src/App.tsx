@@ -64,10 +64,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn, getGradeColor, calculateRSI, calculateSpiciness, calculateResearchGrade } from "@/lib/utils";
+import { cn, getGradeColor, calculateRSI, calculateSpiciness, calculateResearchGrade, getApiUrl, safeAlert } from "@/lib/utils";
 import { getTickersFromAI, getCombinedAnalysis, getCombinedAnalysisStream, getDeepDiveAnalysis } from "@/lib/gemini";
 
-import { auth, getDb, handleFirestoreError, OperationType, Timestamp, onAuthStateChanged, signInWithGoogle, logout, onSnapshot, setDoc, db, doc } from "./firebase";
+import { auth, getDb, handleFirestoreError, OperationType, Timestamp, onAuthStateChanged, signInWithGoogle, logout, onSnapshot, setDoc, doc } from "./firebase";
 // import { doc } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { WatchlistHeader } from "./components/WatchlistHeader";
@@ -136,6 +136,7 @@ function AppContent() {
   }, []);
 
   const [user, setUser] = useState<User | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [query, setQuery] = useState("");
   const [tickers, setTickers] = useState<string[]>([]);
@@ -177,6 +178,24 @@ function AppContent() {
   const [showGradeModal, setShowGradeModal] = useState(false);
   const [dashboardData, setDashboardData] = useState<Record<string, StockInfo>>({});
   
+  // NEW: Auth Error Handling
+  useEffect(() => {
+    // Check for redirect result on mount if redirect auth was used
+    import('./firebase').then(({ checkRedirectResult }) => {
+      checkRedirectResult();
+    });
+  }, []);
+
+  const handleSignIn = async () => {
+    try {
+      setAuthError(null);
+      await signInWithGoogle();
+    } catch (e: any) {
+      console.error(e);
+      setAuthError(e?.message || "Failed to sign in. Ensure Google Sign-In is enabled in Firebase Console.");
+    }
+  };
+
   // NEW: Comparison State
   const [comparisonList, setComparisonList] = useState<string[]>([]);
   const [showComparison, setShowComparison] = useState(false);
@@ -262,7 +281,7 @@ function AppContent() {
 
   const handleInstall = async () => {
     if (!deferredPrompt) {
-      alert("Installation is handled by your browser. Look for 'Add to Home Screen' in your browser menu.");
+      safeAlert("Installation is handled by your browser. Look for 'Add to Home Screen' in your browser menu.");
       return;
     }
     deferredPrompt.prompt();
@@ -280,6 +299,9 @@ function AppContent() {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setIsAuthReady(true);
+      if (u && step === 'instructions') {
+        setStep('prompt');
+      }
       console.log("Auth state changed. User:", u?.email);
     });
     
@@ -483,7 +505,7 @@ Confidential AI Analysis
     const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
     try {
-      const res = await fetch(`/api/stock/${ticker}`, { signal: controller.signal });
+      const res = await fetch(getApiUrl(`/api/stock/${ticker}`), { signal: controller.signal });
       clearTimeout(timeoutId);
       
       if (res.status === 404) {
@@ -545,7 +567,7 @@ Confidential AI Analysis
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     
     try {
-      const res = await fetch(`/api/history/${ticker}?days=${days}`, { signal: controller.signal });
+      const res = await fetch(getApiUrl(`/api/history/${ticker}?days=${days}`), { signal: controller.signal });
       clearTimeout(timeoutId);
       
       if (res.status === 404) {
@@ -634,15 +656,15 @@ Confidential AI Analysis
         } else if (msg.includes('Failed to fetch')) {
           userMsg = "Connection to Research AI lost. Check your internet.";
         }
-        alert(`${userMsg}\n\nTechnical details: ${msg.slice(0, 100)}...`);
+        safeAlert(`${userMsg}\n\nTechnical details: ${msg.slice(0, 100)}...`);
         return;
       }
       
       if (!results || results.length === 0) {
         if (isLoadMore) {
-          alert("No more unique stock tickers found for this query.");
+          safeAlert("No more unique stock tickers found for this query.");
         } else {
-          alert("No relevant stock tickers found for this query. Try being more specific!");
+          safeAlert("No relevant stock tickers found for this query. Try being more specific!");
         }
         return;
       }
@@ -699,9 +721,9 @@ Confidential AI Analysis
     if (t && !watchlist.includes(t)) {
       setLoading(true);
       try {
-        const res = await fetch(`/api/stock/${t}`);
+        const res = await fetch(getApiUrl(`/api/stock/${t}`));
         if (!res.ok) {
-          alert(`Asset ${t} not found or invalid. Please check the symbol and try again.`);
+          safeAlert(`Asset ${t} not found or invalid. Please check the symbol and try again.`);
           return;
         }
         const newList = [...watchlist, t];
@@ -710,7 +732,7 @@ Confidential AI Analysis
         setManualTicker("");
         setSelectedTicker(t);
       } catch (err) {
-        alert("Connectivity error while validating ticker.");
+        safeAlert("Connectivity error while validating ticker.");
       } finally {
         setLoading(false);
       }
@@ -867,7 +889,7 @@ Confidential AI Analysis
         console.warn('Analysis quota exceeded for %s', ticker);
       } else {
         console.error("Analysis error for", ticker, ":", errorStr);
-        if (!silent) alert("Analysis failed. Please try again.");
+        if (!silent) safeAlert("Analysis failed. Please try again.");
       }
     } finally {
       fetchingAnalysisRef.current.delete(ticker);
@@ -898,7 +920,7 @@ Confidential AI Analysis
 
   if (step === 'instructions') {
     return (
-        <div className="min-h-screen bg-slate-900 trapper-keeper-gradient flex items-center justify-center px-4 sm:px-8 py-12 overflow-x-hidden relative">
+        <div className="min-h-[100dvh] bg-slate-900 trapper-keeper-gradient flex items-center justify-center px-4 sm:px-8 py-12 overflow-x-hidden relative">
         <HandDrawnFilter />
         
         <motion.div 
@@ -948,13 +970,39 @@ Confidential AI Analysis
 
             <div className="flex flex-col items-center pt-8 mt-auto w-full max-w-2xl mx-auto border-t-2 border-dashed border-slate-300">
               {!user ? (
-                <Button 
-                  onClick={signInWithGoogle}
-                  className="h-16 w-full max-w-sm px-12 bg-white text-black hover:bg-slate-100 rounded-none font-heading font-bold text-xl uppercase tracking-widest shadow-[8px_8px_0px_0px_rgba(0,0,0,0.2)] transition-all hover:translate-x-1 hover:translate-y-1 hover:shadow-none group border-2 border-slate-900"
-                >
-                  Sign In with Google
-                  <ChevronRight className="ml-2 transition-transform group-hover:translate-x-1" />
-                </Button>
+                <div className="w-full flex flex-col items-center">
+                  <Button 
+                    onClick={handleSignIn}
+                    className="h-16 w-full max-w-sm px-12 bg-white text-black hover:bg-slate-100 rounded-none font-heading font-bold text-xl uppercase tracking-widest shadow-[8px_8px_0px_0px_rgba(0,0,0,0.2)] transition-all hover:translate-x-1 hover:translate-y-1 hover:shadow-none group border-2 border-slate-900"
+                  >
+                    Sign In with Google
+                    <ChevronRight className="ml-2 transition-transform group-hover:translate-x-1" />
+                  </Button>
+                  
+                  <Button
+                    onClick={() => setStep('prompt')}
+                    variant="outline"
+                    className="h-12 w-full max-w-sm mt-4 bg-transparent border-2 border-slate-500 text-slate-700 hover:bg-slate-200 uppercase tracking-widest font-heading font-bold transition-colors"
+                  >
+                    Continue as Guest
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                  {authError && (
+                    <div className="mt-4 p-4 border-2 border-rose-500 bg-rose-50 text-rose-700 font-sans text-sm max-w-sm text-center shadow-[4px_4px_0px_0px_rgba(244,63,94,1)] flex flex-col items-center">
+                      <AlertCircle className="w-5 h-5 mx-auto mb-2 text-rose-500" />
+                      <p className="mb-3 whitespace-pre-line">{authError}</p>
+                      
+                      <a 
+                        href={window.location.href} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="h-10 px-4 inline-flex items-center justify-center bg-white border-2 border-rose-500 text-rose-700 hover:bg-rose-50 font-bold font-sans text-xs uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(244,63,94,1)] transition-transform hover:-translate-y-0.5 active:translate-y-0"
+                      >
+                        Open in New Tab ↗
+                      </a>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full">
                   {/* Minimized User Badge - Authenticated Visual Cue */}
@@ -1013,7 +1061,7 @@ Confidential AI Analysis
 
 if (step === 'prompt') {
   return (
-      <div className="min-h-screen bg-slate-900 trapper-keeper-gradient flex flex-col overflow-x-hidden relative">
+      <div className="min-h-[100dvh] bg-slate-900 trapper-keeper-gradient flex flex-col overflow-x-hidden relative">
       <HandDrawnFilter />
       
       <WatchlistHeader 
@@ -1105,7 +1153,7 @@ if (step === 'prompt') {
 
   if (step === 'download') {
     return (
-        <div className="min-h-screen bg-slate-900 trapper-keeper-gradient flex items-center justify-center px-4 overflow-x-hidden relative">
+        <div className="min-h-[100dvh] bg-slate-900 trapper-keeper-gradient flex items-center justify-center px-4 overflow-x-hidden relative">
           <HandDrawnFilter />
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
@@ -1153,7 +1201,7 @@ if (step === 'prompt') {
   }
 
   return (
-      <div className="min-h-screen bg-slate-900 trapper-keeper-gradient text-slate-900 font-sans selection:bg-trapper-lime/30 flex flex-col overflow-x-hidden relative">
+      <div className="min-h-[100dvh] bg-slate-900 trapper-keeper-gradient text-slate-900 font-sans selection:bg-trapper-lime/30 flex flex-col overflow-x-hidden relative">
       <HandDrawnFilter />
       <WatchlistHeader 
         watchlist={watchlist}

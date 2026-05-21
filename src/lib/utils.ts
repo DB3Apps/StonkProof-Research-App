@@ -147,3 +147,79 @@ export function getGradeColor(grade: string): string {
   if (cleanGrade.startsWith('F')) return 'bg-trapper-pink text-white border-slate-900';
   return 'bg-white text-slate-900 border-slate-900';
 }
+
+/**
+ * Returns a fully-qualified API URL if running natively, or a relative URL on web.
+ */
+export function getApiUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  
+  // Use VITE_API_URL if configured
+  const envApiUrl = (import.meta as any).env?.VITE_API_URL;
+  if (envApiUrl) {
+    return `${envApiUrl.replace(/\/$/, '')}${cleanPath}`;
+  }
+
+  // Detect native Capacitor container context
+  const isCapNative = typeof window !== 'undefined' && (window as any).Capacitor?.isNative;
+  if (isCapNative) {
+    const savedUrl = localStorage.getItem('custom_api_server_url');
+    if (savedUrl) {
+      return `${savedUrl.replace(/\/$/, '')}${cleanPath}`;
+    }
+    // Deep fallback dynamic resolve
+    const defaultHost = "https://ais-dev-2w4r6e7fi5khrjy2ii6n5z-226246344653.us-west1.run.app";
+    return `${defaultHost}${cleanPath}`;
+  }
+  
+  return cleanPath;
+}
+
+/**
+ * Multi-Platform Safe Alert Utility
+ * Bypasses iframe sandbox blockades by showing an elegant, non-blocking absolute HTML Toast Alert.
+ */
+export function safeAlert(message: string): void {
+  try {
+    console.warn("[App Warning Alert]:", message);
+    if (typeof window !== "undefined") {
+      // Remove stale toasts first
+      const existing = document.getElementById("stonkproof-toast");
+      if (existing) existing.remove();
+
+      const toast = document.createElement("div");
+      toast.id = "stonkproof-toast";
+      
+      // Inline Tailwind-compatible style structure or generic absolute layout classes
+      toast.className = "fixed bottom-5 right-5 z-[10000] max-w-sm border-2 border-black bg-slate-900 text-white p-4 shadow-[4px_4px_0_0_#ea580c] animate-in fade-in slide-in-from-bottom duration-300 font-sans text-xs flex flex-col gap-2";
+      
+      toast.innerHTML = `
+        <div class="flex items-center justify-between gap-4">
+          <span class="font-bold text-orange-500 uppercase tracking-widest text-[11px]">⚠️ RESEARCH WARNING</span>
+          <button id="stonkproof-toast-close" class="text-slate-400 hover:text-white font-bold cursor-pointer text-sm">✕</button>
+        </div>
+        <p class="text-slate-200 mt-1 leading-relaxed">${message.replace(/\n/g, '<br/>')}</p>
+      `;
+      
+      document.body.appendChild(toast);
+      
+      // Bind click handler dynamically
+      const closeBtn = toast.querySelector("#stonkproof-toast-close");
+      if (closeBtn) {
+        closeBtn.addEventListener("click", () => toast.remove());
+      }
+      
+      // Safety auto-dismiss
+      setTimeout(() => {
+        try {
+          toast.remove();
+        } catch (_) {}
+      }, 8000);
+    }
+  } catch (err) {
+    console.error("Failed to showcase safe alert:", err);
+  }
+}

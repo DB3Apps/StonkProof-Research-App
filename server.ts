@@ -3,21 +3,24 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import yahooFinance from 'yahoo-finance2';
+import _yahooFinance from 'yahoo-finance2';
 import rateLimit from 'express-rate-limit';
+import { getTickersFromAI, getCombinedAnalysis, handleCombinedAnalysisStream, getDeepDiveAnalysis } from './server/gemini.js';
 
 const _filename = typeof __filename !== 'undefined' ? __filename : fileURLToPath(import.meta.url);
 const _dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(_filename);
 
-const yahoo = new (yahooFinance as any)({
-  logger: {
-    info: (...args: any[]) => {},
-    warn: (...args: any[]) => {},
-    error: (...args: any[]) => {},
-    debug: (...args: any[]) => {},
-    dir: (...args: any[]) => {}
+let yahoo: any;
+try {
+  yahoo = new (_yahooFinance as any)();
+} catch (e: any) {
+  if (_yahooFinance && (_yahooFinance as any).default && typeof (_yahooFinance as any).default === 'function') {
+    yahoo = new (_yahooFinance as any).default();
+  } else {
+    yahoo = _yahooFinance;
   }
-});
+}
+
 if (yahoo && typeof (yahoo as any).setGlobalConfig === 'function') {
   (yahoo as any).setGlobalConfig({
     validation: { 
@@ -59,17 +62,64 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.set('trust proxy', 1);
   app.use(express.json());
 
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 1000,
   });
-  app.use(limiter);
+  app.use('/api', limiter);
 
   // API Routes
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Gemini Proxy Routes
+  app.post('/api/gemini/getTickersFromAI', async (req, res) => {
+    try {
+      const { userPrompt, limit, excludedTickers } = req.body;
+      const tickers = await getTickersFromAI(userPrompt, limit, excludedTickers);
+      res.json({ tickers });
+    } catch (error: any) {
+      console.error("Error in /api/gemini/getTickersFromAI:", error);
+      res.status(500).json({ error: error.message || String(error) });
+    }
+  });
+
+  app.post('/api/gemini/getCombinedAnalysis', async (req, res) => {
+    try {
+      const { longSummary, useSearch } = req.body;
+      const analysis = await getCombinedAnalysis(longSummary, useSearch);
+      res.json(analysis);
+    } catch (error: any) {
+      console.error("Error in /api/gemini/getCombinedAnalysis:", error);
+      res.status(500).json({ error: error.message || String(error) });
+    }
+  });
+
+  app.post('/api/gemini/getCombinedAnalysisStream', async (req, res) => {
+    try {
+      const { longSummary, useSearch } = req.body;
+      await handleCombinedAnalysisStream(longSummary, res, useSearch);
+    } catch (error: any) {
+      console.error("Error in /api/gemini/getCombinedAnalysisStream:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message || String(error) });
+      }
+    }
+  });
+
+  app.post('/api/gemini/getDeepDiveAnalysis', async (req, res) => {
+    try {
+      const { ticker, companyInfo } = req.body;
+      const analysis = await getDeepDiveAnalysis(ticker, companyInfo);
+      res.json({ analysis });
+    } catch (error: any) {
+      console.error("Error in /api/gemini/getDeepDiveAnalysis:", error);
+      res.status(500).json({ error: error.message || String(error) });
+    }
   });
 
   app.get('/api/stock/:ticker', async (req, res) => {
@@ -200,7 +250,9 @@ async function startServer() {
       }
     });
   } else {
-    const distPath = _dirname.endsWith('build') ? _dirname : path.resolve(_dirname, 'build');
+    // In production, server.cjs is in dist/, so _dirname is already the dist folder.
+    // If run directly via node outside dist, we resolve to dist.
+    const distPath = _dirname.endsWith('dist') ? _dirname : path.resolve(_dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.resolve(distPath, 'index.html'));

@@ -11,7 +11,7 @@ export const SKETCH_PATHS = {
   mushroom: "M12 2C7 2 3 6 3 10C3 11 6 11 6 11V18C6 20 8 22 10 22H14C16 22 18 20 18 18V11C18 11 21 11 21 10C21 6 17 2 12 2ZM8 7C8.5 7 9 7.5 9 8C9 8.5 8.5 9 8 9C7.5 9 7 8.5 7 8C7 7.5 7.5 7 8 7ZM15 5C15.5 5 16 5.5 16 6C16 6.5 15.5 7 15 7C14.5 7 14 6.5 14 6C14 5.5 14.5 5 15 5Z",
   bolt: "M13 2L3 14H12L11 22L21 10H12L13 2Z",
   heart: "M12 21L10 19C6 15 2 12 2 8C2 5 4 2 8 2C10 2 11 3 12 4C13 3 14 2 16 2C20 2 22 5 22 8C22 12 18 15 14 19L12 21Z",
-  smile: "M12 22C17.5 22 22 17.5 22 12C22 6.5 17.5 2 12 2C6.5 2 2 6.5 2 12C2 17.5 6.5 22 12 22ZM9 9C9.5 9 10 10M15 9C15.5 9 16 10M8 15C9 17 10 18 12 18C14 18 15 17 16 15",
+  smile: "M12 22C17.5 22 22 17.5 22 12C22 6.5 17.5 2 12 2C6.5 2 2 6.5 2 12C2 17.5 6.5 22 12 22Z M9 9C9.5 9 10 10 M15 9C15.5 9 16 10 M8 15C9 17 10 18 12 18C14 18 15 17 16 15",
   pizza: "M12 2L4 18H20L12 2ZM10 12C10.6 12 11 11.6 11 11M14 14C14.6 14 15 13.6 15 13M9 16C9.6 16 10 15.6 10 15",
   soda: "M6 6V18C6 20.2 8.7 22 12 22C15.3 22 18 20.2 18 18V6M6 6C6 3.8 8.7 2 12 2C15.3 2 18 3.8 18 6M6 6C6 8.2 8.7 10 12 10C15.3 10 18 8.2 18 6",
   cat: "M12 13C10 13 8 14 8 16C8 18 10 20 12 20C14 20 16 18 16 16C16 14 14 13 12 13ZM12 13V15M8 16H6M16 16H18M7 8L4 4V10M17 8L20 4V10",
@@ -24,7 +24,7 @@ export const SKETCH_PATHS = {
 };
 
 export const HandDrawnFilter = () => (
-  <svg className="hidden">
+  <svg aria-hidden="true" style={{ width: 0, height: 0, position: 'absolute', pointerEvents: 'none' }}>
     <defs>
       <filter id="hand-drawn">
         <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="3" result="noise" />
@@ -70,10 +70,33 @@ export const DoodleField = React.memo(({ density = 8, opacity = 1.0, seed = 1 }:
       {[...Array(density)].map((_, i) => {
         const type = types[i % types.length];
         const s = seed + i * 13.5;
-        const top = seededRandom(s) * 85 + 5;
-        const left = seededRandom(s + 1) * 85 + 5;
-        const rotate = seededRandom(s + 2) * 360;
-        const size = 32 + seededRandom(s + 3) * 32;
+        const zoneRand = seededRandom(s);
+        let top, left;
+        
+        const randX = seededRandom(s + 1);
+        const randY = seededRandom(s + 2);
+        
+        // Prevent doodles from overlapping central interactive elements
+        if (zoneRand < 0.35) {
+          // Left margin
+          left = randX * 15 + 2;
+          top = randY * 92 + 4;
+        } else if (zoneRand < 0.70) {
+          // Right margin
+          left = 83 + randX * 15;
+          top = randY * 92 + 4;
+        } else if (zoneRand < 0.85) {
+          // Top margin
+          left = 20 + randX * 60;
+          top = randY * 15 + 2;
+        } else {
+          // Bottom margin
+          left = 20 + randX * 60;
+          top = 83 + randY * 15;
+        }
+        
+        const rotate = seededRandom(s + 3) * 360;
+        const size = 24 + seededRandom(s + 4) * 32;
         
         return (
           <HandDrawnDoodle 

@@ -1,3 +1,5 @@
+import { getApiUrl } from "./utils";
+
 export interface StockQuote {
   symbol: string;
   shortName?: string;
@@ -14,7 +16,7 @@ export interface HistoricalData {
 
 export async function fetchStockQuote(ticker: string): Promise<StockQuote | null> {
   try {
-    const response = await fetch(`/api/stock/${ticker}`);
+    const response = await fetch(getApiUrl(`/api/stock/${ticker}`));
     if (!response.ok) throw new Error("Failed to fetch stock");
     return await response.json();
   } catch (error) {
@@ -25,7 +27,7 @@ export async function fetchStockQuote(ticker: string): Promise<StockQuote | null
 
 export async function fetchStockHistory(ticker: string): Promise<HistoricalData[]> {
   try {
-    const response = await fetch(`/api/history/${ticker}`);
+    const response = await fetch(getApiUrl(`/api/history/${ticker}`));
     if (!response.ok) throw new Error("Failed to fetch history");
     const data = await response.json();
     return data.map((item: any) => ({

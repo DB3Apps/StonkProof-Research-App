@@ -16,7 +16,10 @@ export default defineConfig(({mode}) => {
   const apiKey = realKey || process.env.GEMINI_API_KEY || env.GEMINI_API_KEY || "";
   
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(), 
+      tailwindcss()
+    ],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(apiKey),
       'process.env.NODE_ENV': JSON.stringify(mode),
@@ -29,7 +32,8 @@ export default defineConfig(({mode}) => {
       dedupe: ['react', 'react-dom'],
     },
     build: {
-      outDir: 'build',
+      target: 'es2015',
+      outDir: 'dist',
       assetsDir: 'assets',
       emptyOutDir: true,
     },

@@ -1,5 +1,6 @@
-import { db, auth, getDoc, doc } from "../firebase";
-import { ai } from "./gemini";
+import { auth, getDoc, doc, getDb } from "../firebase";
+import { getTickersFromAI } from "./gemini";
+import { getApiUrl } from "./utils";
 
 export interface DiagnosticResult {
   service: string;
@@ -14,16 +15,21 @@ export async function runFullDiagnostic(): Promise<DiagnosticResult[]> {
   // 1. Check AI Connectivity
   try {
     const start = Date.now();
-    await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: "ping",
-    });
-    results.push({
-      service: 'Gemini AI',
-      status: 'ok',
-      message: 'Connection successful',
-      latency: Date.now() - start
-    });
+    const tickers = await getTickersFromAI("USA economy index tickers", 1);
+    if (tickers && tickers.length > 0) {
+      results.push({
+        service: 'Gemini AI',
+        status: 'ok',
+        message: 'Connection successful',
+        latency: Date.now() - start
+      });
+    } else {
+      results.push({
+        service: 'Gemini AI',
+        status: 'warning',
+        message: 'Returned empty ticker list. Quota or network limit might be active.'
+      });
+    }
   } catch (e: any) {
     results.push({
       service: 'Gemini AI',
@@ -35,7 +41,7 @@ export async function runFullDiagnostic(): Promise<DiagnosticResult[]> {
   // 2. Check Firestore Connectivity
   try {
     const start = Date.now();
-    const dbInstance = db;
+    const dbInstance = getDb();
     // Use a non-existent doc just to check connectivity
     if (dbInstance) {
        await getDoc(doc(dbInstance, 'system', 'connectivity_check'));
@@ -63,7 +69,7 @@ export async function runFullDiagnostic(): Promise<DiagnosticResult[]> {
   // 3. Check Backend API (Yahoo Finance Proxy)
   try {
     const start = Date.now();
-    const res = await fetch('/api/stock/AAPL');
+    const res = await fetch(getApiUrl('/api/stock/AAPL'));
     if (res.ok) {
       results.push({
         service: 'Market Data API',

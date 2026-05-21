@@ -4,6 +4,7 @@ import { Input } from './ui/input';
 import { ChevronRight, Plus, Trash2, Loader2, Search, X } from 'lucide-react';
 import { auth, getDb, collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, handleFirestoreError, OperationType } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
+import { safeAlert } from '../lib/utils';
 
 interface ResearchList {
   id: string;
@@ -95,7 +96,7 @@ export const ResearchListsView = ({ onBack, onViewResearch }: ResearchListsViewP
     if (!selectedList || isCurated || !newTicker.trim() || !auth.currentUser || !db) return;
 
     if (selectedList.tickers.length >= 10) {
-      alert("Maximum of 10 stocks allowed per research list to maintain focus.");
+      safeAlert("Maximum of 10 stocks allowed per research list to maintain focus.");
       return;
     }
 

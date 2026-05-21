@@ -2,5 +2,5 @@
   "name": "StonkProof Research",
   "description": "An AI-powered stock discovery tool that flips through top 10 stocks based on your prompts, featuring real-time data and interactive charts.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

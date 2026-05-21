@@ -101,7 +101,7 @@
 
   .pencil-doodle {
     @apply text-black opacity-100;
-    filter: url(#pencil-jitter) drop-shadow(0.5px 0.5px 0.2px rgba(0,0,0,0.1));
+    filter: url(#hand-drawn) drop-shadow(0.5px 0.5px 0.2px rgba(0,0,0,0.1));
   }
 
   .no-scrollbar::-webkit-scrollbar {
